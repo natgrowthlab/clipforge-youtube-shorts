@@ -54,6 +54,16 @@
       <div class="details"><span class="cut"></span><span class="cta"></span></div>
     </article>
   </template>
+  <dialog id="transcriptDialog" aria-labelledby="transcriptTitle">
+    <form method="dialog" class="dialog-card">
+      <button class="dialog-close" value="cancel" aria-label="Cerrar">×</button>
+      <div class="eyebrow">03 · TIME CODES REALES</div>
+      <h2 id="transcriptTitle">Pega la transcripción<br><em>con sus tiempos.</em></h2>
+      <p>Admite líneas como <code>00:35 - La idea empieza aquí</code> o <code>[01:12] Otra idea.</code> ClipForge usará cada bloque para ubicar los cortes.</p>
+      <textarea id="transcriptText" placeholder="00:00 - Introducción&#10;00:28 - El primer problema es…&#10;01:14 - Aquí cambia todo…"></textarea>
+      <div class="dialog-actions"><span id="transcriptStatus"></span><button class="ghost" value="cancel">Ahora no</button><button class="save-transcript" id="saveTranscript" value="default">Analizar transcripción ↗</button></div>
+    </form>
+  </dialog>
   <footer>CLIPFORGE · HAZ QUE CADA IDEA TRABAJE DOS VECES</footer>
   <script src="./app.js"></script>
 </body>
