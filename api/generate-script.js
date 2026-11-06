@@ -5,6 +5,15 @@ function parseJson(text) {
   return JSON.parse(cleaned);
 }
 
+function responseText(result) {
+  if (result.output_text) return result.output_text;
+  return (result.output || [])
+    .flatMap(item => item.content || [])
+    .filter(content => content.type === 'output_text')
+    .map(content => content.text || '')
+    .join('');
+}
+
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Método no permitido.' });
   if (!session(req)) return res.status(401).json({ error: 'Inicia sesión para generar un guion.' });
@@ -64,7 +73,7 @@ Debes devolver exactamente ${sceneCount} escenas. El texto hablado debe caber en
     });
     const result = await response.json();
     if (!response.ok) return res.status(502).json({ error: result?.error?.message || 'OpenAI no pudo generar el guion.' });
-    const script = parseJson(result.output_text);
+    const script = parseJson(responseText(result));
     if (!script?.title || !Array.isArray(script.scenes) || script.scenes.length !== sceneCount) throw new Error('Respuesta incompleta');
     return res.status(200).json({ script });
   } catch (error) {
