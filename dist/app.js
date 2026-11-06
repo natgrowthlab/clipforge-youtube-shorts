@@ -34,7 +34,7 @@ async function request(path, options = {}) {
   return { response, body: await response.json().catch(() => ({})) };
 }
 
-function showApp() { loginGate.hidden = true; app.hidden = false; }
+function showApp() { loginGate.hidden = true; app.hidden = false; loadQueue(); }
 
 async function checkSession() {
   try { if ((await request('/api/session')).response.ok) showApp(); }
@@ -87,7 +87,14 @@ function setSource(type) {
       $$('.source-tab[data-youtube-mode]').forEach(item => item.classList.toggle('active', item === button));
       $('#youtubeNote').textContent = youtubeMode === 'reference'
         ? 'La IA analizará estructura, tema y ángulo para proponer contenido nuevo.'
-        : 'Usa solo material propio o autorizado. Se preparará una ruta de clips y reedición.';
+        : 'Usa solo material propio o autorizado. Sube el MP4 original para crear una cola de clips.';
+      let controls = $('#clipControls');
+      if (youtubeMode === 'clip' && !controls) {
+        controls = document.createElement('div'); controls.id = 'clipControls'; controls.style.marginTop = '12px';
+        controls.innerHTML = `<label style="font-size:12px;display:grid;gap:7px"><input id="clipAuthorized" type="checkbox" /> Confirmo que soy titular o tengo autorización para reeditar este material.</label><input id="clipFile" type="file" accept="video/mp4" style="margin-top:10px" /><span class="field-note">El MP4 original se sube directamente a tu almacenamiento; ClipForge no descarga videos de YouTube.</span>`;
+        $('#sourceBody').append(controls);
+      }
+      if (youtubeMode === 'reference' && controls) controls.remove();
     }));
   }
 }
@@ -99,6 +106,31 @@ function spokenLanguage(language) {
 function clean(value) { return value.trim().replace(/\s+/g, ' '); }
 function cap(value) { return value.charAt(0).toUpperCase() + value.slice(1); }
 function escapeHtml(value) { return String(value || '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char])); }
+
+function estimatedCredits(item = project) {
+  if (!item) return 0;
+  const base = item.format === 'long' ? 8 : 3;
+  return item.sourceType === 'youtube' && item.youtubeMode === 'clip' ? base + 4 : base;
+}
+
+function updateCostEstimate() {
+  if (!project) return;
+  const credits = estimatedCredits();
+  $('#costEstimate').textContent = `Estimado para este proyecto: ${credits} créditos. El render se bloquea si supera tu límite.`;
+  const budget = $('#budgetSelect');
+  budget.value = credits > 8 ? '15' : credits > 3 ? '8' : '3';
+}
+
+async function loadQueue() {
+  const list = $('#queueList');
+  if (!list) return;
+  try {
+    const { response, body } = await request('/api/render-jobs');
+    if (!response.ok || !body.jobs?.length) return;
+    list.hidden = false;
+    list.innerHTML = `<b>COLA DE PRODUCCIÓN</b><br>${body.jobs.slice(0, 5).map(job => `${escapeHtml(job.title)} · ${job.kind === 'clip-reedit' ? 'clips autorizados' : 'video generado'} · ${escapeHtml(job.status)} · ${job.estimatedCredits} créditos`).join('<br>')}`;
+  } catch { /* Queue remains optional if storage is unavailable. */ }
+}
 
 function buildScenes(brief, format, language, style) {
   const subject = clean(brief);
@@ -137,6 +169,7 @@ async function renderProject() {
   }
   const format = $('#format').value;
   const language = $('#language').value;
+  let sourceAsset = null;
   if (sourceType === 'pdf') {
     $('.field-note').textContent = 'La carga de PDF necesita Vercel Blob. Configura el almacenamiento para continuar con esta fuente.';
     return;
@@ -146,6 +179,16 @@ async function renderProject() {
   button.textContent = 'Generando guion con IA…';
   let generated;
   try {
+    if (sourceType === 'youtube' && youtubeMode === 'clip') {
+      const file = $('#clipFile')?.files?.[0];
+      if (!$('#clipAuthorized')?.checked || !file) throw new Error('Para reeditar, confirma autorización y sube el MP4 original.');
+      button.textContent = 'Subiendo video autorizado…';
+      const { upload } = await import('https://esm.sh/@vercel/blob@2.8.2/client');
+      const safeFile = file.name.replace(/[^a-z0-9.]+/gi, '-').toLowerCase();
+      const stored = await upload(`sources/${Date.now()}-${safeFile}`, file, { access: 'public', handleUploadUrl: '/api/blob-client-upload', headers: savedSession() ? { Authorization: `Bearer ${savedSession()}` } : {}, contentType: 'video/mp4' });
+      sourceAsset = stored.url;
+      button.textContent = 'Analizando material…';
+    }
     const { response, body } = await request('/api/generate-script', { method: 'POST', body: JSON.stringify({ sourceType, source: raw, youtubeMode, format, language, visualStyle }) });
     if (!response.ok) throw new Error(body.error || 'No pudimos generar el guion.');
     generated = body.script;
@@ -155,7 +198,8 @@ async function renderProject() {
     return;
   } finally { button.disabled = false; button.innerHTML = 'Crear guion para revisión <b>↗</b>'; }
   const scenes = generated.scenes.map(scene => ({ time: scene.time, title: scene.title, script: scene.script, direction: scene.direction, visualPrompt: scene.visual_prompt, subtitle: scene.subtitle, cta: scene.cta }));
-  project = { sourceType, source: raw, youtubeMode, format, language, visualStyle, title: generated.title, brief: generated.brief, hook: generated.hook, scenes, status: 'revisión' };
+  project = { sourceType, source: raw, sourceAsset, youtubeMode, format, language, visualStyle, title: generated.title, brief: generated.brief, hook: generated.hook, scenes, status: 'revisión' };
+  updateCostEstimate();
   $('#scriptTitle').textContent = `${format === 'long' ? 'Video 4–5 min' : 'Short / Reel'} · ${generated.title}`;
   $('#strategy').innerHTML = `<div><label>IDEA CENTRAL</label><p>${escapeHtml(generated.brief)}</p></div><div><label>HOOK</label><p>${escapeHtml(generated.hook)}</p></div><div><label>ESTILO</label><p>${escapeHtml(visualStyle)} · ${escapeHtml(language)}</p></div>`;
   const output = $('#scriptOutput');
@@ -427,10 +471,20 @@ $('#renderTestBtn').addEventListener('click', createTestMp4);
 $('#renderFullBtn').addEventListener('click', createFullVisual);
 $('#voiceBtn').addEventListener('click', createAiVoice);
 $('#composeBtn').addEventListener('click', composeMp4WithVoice);
-$('#queueRender').addEventListener('click', () => {
+$('#queueRender').addEventListener('click', async () => {
   if (!project) return;
   const button = $('#queueRender');
-  button.textContent = 'Render reservado — activa Blob y motor MP4';
-  button.disabled = true;
-  project.status = 'pendiente de render';
+  project.scenes = $$('.review-card textarea').map((field, index) => ({ ...project.scenes[index], script: field.value }));
+  button.disabled = true; button.textContent = 'Enviando a cola…';
+  try {
+    const { response, body } = await request('/api/render-jobs', { method: 'POST', body: JSON.stringify({ ...project, maxCredits: Number($('#budgetSelect').value) }) });
+    if (!response.ok) throw new Error(body.error || 'No pudimos crear el trabajo.');
+    project.status = 'queued';
+    $('#queueStatus').textContent = `En cola · ${body.job.kind === 'clip-reedit' ? 'recorte autorizado' : 'video generado'} · máximo ${body.job.maxCredits} créditos.`;
+    button.textContent = 'Enviado ✓';
+    await loadQueue();
+  } catch (error) {
+    $('#queueStatus').textContent = error.message; $('#queueStatus').style.color = '#a92820';
+    button.disabled = false; button.textContent = 'Enviar a cola de render';
+  }
 });

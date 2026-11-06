@@ -9,8 +9,10 @@ module.exports = async (req, res) => {
       request: req,
       body: req.body,
       onBeforeGenerateToken: async pathname => {
-        if (!pathname.startsWith('renders/') || !pathname.endsWith('.mp4')) throw new Error('Ruta de archivo no permitida.');
-        return { allowedContentTypes: ['video/mp4'], maximumSizeInBytes: 40 * 1024 * 1024, addRandomSuffix: true, cacheControlMaxAge: 31_536_000 };
+        const isRender = pathname.startsWith('renders/');
+        const isAuthorizedSource = pathname.startsWith('sources/');
+        if ((!isRender && !isAuthorizedSource) || !pathname.endsWith('.mp4')) throw new Error('Ruta de archivo no permitida.');
+        return { allowedContentTypes: ['video/mp4'], maximumSizeInBytes: (isAuthorizedSource ? 200 : 40) * 1024 * 1024, addRandomSuffix: true, cacheControlMaxAge: 31_536_000 };
       }
     });
     return res.status(200).json(response);
