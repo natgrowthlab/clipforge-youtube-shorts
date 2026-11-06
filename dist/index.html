@@ -12,8 +12,21 @@
 </head>
 <body>
   <div class="noise"></div>
-  <main>
-    <nav><a class="brand" href="#">clip<span>forge</span><i></i></a><span class="nav-note">ESTUDIO DE CORTOS · v1.0</span></nav>
+  <section class="login-gate" id="loginGate" aria-labelledby="loginTitle">
+    <form class="login-card" id="loginForm">
+      <a class="brand" href="#">clip<span>forge</span><i></i></a>
+      <div class="eyebrow">ACCESO PRIVADO</div>
+      <h1 id="loginTitle">Tu próxima pieza<br><em>empieza aquí.</em></h1>
+      <p>Inicia sesión para transformar un episodio de YouTube en clips listos para editar.</p>
+      <label>Correo electrónico<input id="email" type="email" autocomplete="username" required placeholder="nombre@correo.com" /></label>
+      <label>Contraseña<input id="password" type="password" autocomplete="current-password" required placeholder="••••••••••" /></label>
+      <p class="login-error" id="loginError" role="alert"></p>
+      <button type="submit" id="loginBtn">Entrar a ClipForge <b>↗</b></button>
+      <small>Acceso restringido · Sesión segura</small>
+    </form>
+  </section>
+  <main id="app" hidden>
+    <nav><a class="brand" href="#">clip<span>forge</span><i></i></a><div class="nav-controls"><span class="nav-note">ESTUDIO DE CORTOS · v1.0</span><button class="logout" id="logoutBtn">Salir</button></div></nav>
     <section class="hero">
       <div class="eyebrow">DE UN VIDEO LARGO A UNA SERIE QUE RETIENE</div>
       <h1>Encuentra los <em>momentos</em><br>que merecen otra vida.</h1>

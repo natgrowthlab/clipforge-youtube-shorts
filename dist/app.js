@@ -1,4 +1,11 @@
 const $ = s => document.querySelector(s);
+const app=$('#app'), loginGate=$('#loginGate'), loginForm=$('#loginForm'), loginError=$('#loginError'), loginBtn=$('#loginBtn');
+function showApp(){loginGate.hidden=true;app.hidden=false;}
+async function request(path, options={}){const response=await fetch(path,{credentials:'same-origin',headers:{'Content-Type':'application/json',...(options.headers||{})},...options});const body=await response.json().catch(()=>({}));return {response,body}}
+async function checkSession(){try{const {response}=await request('/api/session');if(response.ok){showApp()}}catch{loginError.textContent='No fue posible conectar con el acceso. Inténtalo de nuevo.'}}
+loginForm.addEventListener('submit',async event=>{event.preventDefault();loginError.textContent='';loginBtn.disabled=true;loginBtn.textContent='Comprobando…';try{const {response,body}=await request('/api/login',{method:'POST',body:JSON.stringify({email:$('#email').value,password:$('#password').value})});if(response.ok){loginForm.reset();showApp()}else{loginError.textContent=body.error||'No se pudo iniciar sesión.'}}catch{loginError.textContent='No fue posible iniciar sesión.'}finally{loginBtn.disabled=false;loginBtn.innerHTML='Entrar a ClipForge <b>↗</b>'}});
+$('#logoutBtn').addEventListener('click',async()=>{await request('/api/logout',{method:'POST'});app.hidden=true;loginGate.hidden=false;$('#email').focus()});
+checkSession();
 const clips = [
   {title:'La creencia que te frena', duration:'00:18 — 00:52 · 34 s', thesis:'Abre con la fricción más reconocible y cambia la perspectiva rápido.', hook:'Si todavía haces esto para avanzar, estás perdiendo tiempo.', cut:'CORTE: reacción + ejemplo', cta:'CTA: ¿Te pasa?', score:'RETENCIÓN 92%'},
   {title:'El método en 3 pasos', duration:'03:14 — 04:00 · 46 s', thesis:'Una pieza guardable: marco simple, ritmo ágil y texto en pantalla.', hook:'No necesitas más disciplina. Necesitas este orden.', cut:'CORTE: 3 beats visuales', cta:'CTA: Guárdalo', score:'GUARDADOS ALTO'},
