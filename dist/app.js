@@ -243,6 +243,68 @@ async function createTestMp4() {
   }
 }
 
+async function createFullVisual() {
+  if (!project) return;
+  const button = $('#renderFullBtn');
+  const note = $('.field-note');
+  if (!window.VideoEncoder || !window.VideoFrame) {
+    note.textContent = 'Este navegador no puede codificar MP4. Abre ClipForge en Chrome actualizado.';
+    note.style.color = '#d64632';
+    return;
+  }
+  button.disabled = true;
+  button.textContent = 'Renderizando…';
+  try {
+    const { Muxer, ArrayBufferTarget } = await import('https://cdn.jsdelivr.net/npm/mp4-muxer@5.2.2/build/mp4-muxer.mjs');
+    const { upload } = await import('https://esm.sh/@vercel/blob@2.8.2/client');
+    const isLong = project.format === 'long';
+    const width = isLong ? 1280 : 540, height = isLong ? 720 : 960, fps = isLong ? 5 : 10;
+    const seconds = isLong ? 270 : 45, frameDuration = 1_000_000 / fps;
+    const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
+    const context = canvas.getContext('2d');
+    const target = new ArrayBufferTarget();
+    const muxer = new Muxer({ target, fastStart: 'in-memory', video: { codec: 'avc', width, height, frameRate: fps } });
+    const encoder = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: error => { throw error; } });
+    const support = await VideoEncoder.isConfigSupported({ codec: 'avc1.42001f', width, height, bitrate: isLong ? 280_000 : 450_000, framerate: fps });
+    if (!support.supported) throw new Error('Tu navegador no tiene codificador H.264 disponible.');
+    encoder.configure(support.config);
+    const totalFrames = seconds * fps, sceneFrames = Math.ceil(totalFrames / project.scenes.length), margin = Math.round(width * .08), contentWidth = width - margin * 2;
+    for (let frameIndex = 0; frameIndex < totalFrames; frameIndex += 1) {
+      const sceneIndex = Math.min(project.scenes.length - 1, Math.floor(frameIndex / sceneFrames));
+      const scene = project.scenes[sceneIndex];
+      const sceneProgress = (frameIndex % sceneFrames) / sceneFrames;
+      const gradient = context.createLinearGradient(0, 0, width, height);
+      gradient.addColorStop(0, '#142219'); gradient.addColorStop(.6, isLong ? '#213d46' : '#384a2e'); gradient.addColorStop(1, '#b7ef52');
+      context.fillStyle = gradient; context.fillRect(0, 0, width, height);
+      context.fillStyle = 'rgba(255,255,255,.11)'; context.beginPath(); context.arc(width * .83 - sceneProgress * width * .18, height * .17, width * .22, 0, Math.PI * 2); context.fill();
+      context.fillStyle = '#d7ff87'; context.font = `600 ${Math.round(width * .028)}px DM Mono, monospace`; context.fillText(`CLIPFORGE  /  ${isLong ? 'YOUTUBE' : 'SHORT'}  /  ${String(sceneIndex + 1).padStart(2, '0')}`, margin, Math.round(height * .1));
+      context.fillStyle = '#f7f5ed'; context.font = `600 ${Math.round(width * (isLong ? .052 : .078))}px Georgia, serif`;
+      let y = Math.round(height * .25); wrapText(context, scene.title, contentWidth).slice(0, 3).forEach(line => { context.fillText(line, margin, y); y += Math.round(width * .075); });
+      const boxY = isLong ? Math.round(height * .5) : Math.round(height * .48), boxH = isLong ? Math.round(height * .28) : Math.round(height * .31);
+      context.fillStyle = 'rgba(9,15,11,.72)'; context.fillRect(margin - 16, boxY, contentWidth + 32, boxH);
+      context.fillStyle = '#fff'; context.font = `400 ${Math.round(width * (isLong ? .027 : .045))}px Arial, sans-serif`;
+      y = boxY + Math.round(width * .06); wrapText(context, scene.script, contentWidth - 36).slice(0, isLong ? 5 : 7).forEach(line => { context.fillText(line, margin, y); y += Math.round(width * (isLong ? .04 : .062)); });
+      const progress = frameIndex / totalFrames; context.fillStyle = '#17201a'; context.fillRect(margin, height - Math.round(height * .1), contentWidth * progress, 9);
+      context.fillStyle = 'rgba(255,255,255,.75)'; context.font = `500 ${Math.round(width * .022)}px Arial, sans-serif`; context.fillText('RENDER VISUAL · SIN NARRACIÓN', margin, height - Math.round(height * .045));
+      const frame = new VideoFrame(canvas, { timestamp: Math.round(frameIndex * frameDuration), duration: Math.round(frameDuration) });
+      encoder.encode(frame, { keyFrame: frameIndex % fps === 0 }); frame.close();
+    }
+    await encoder.flush(); encoder.close(); muxer.finalize();
+    const mp4 = new Blob([target.buffer], { type: 'video/mp4' });
+    button.textContent = 'Subiendo render…';
+    const stored = await upload(`renders/${Date.now()}-${(project.title || 'clipforge').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.mp4`, mp4, {
+      access: 'public', handleUploadUrl: '/api/blob-client-upload', headers: savedSession() ? { Authorization: `Bearer ${savedSession()}` } : {}, contentType: 'video/mp4'
+    });
+    const link = document.createElement('a'); link.href = stored.downloadUrl || stored.url; link.download = `${project.title || 'clipforge-render'}.mp4`; link.textContent = 'Descargar render visual completo'; link.target = '_blank';
+    link.style.cssText = 'display:inline-block;margin-top:12px;font:600 12px DM Mono;color:#17201a;text-decoration:underline';
+    const oldLink = $('#fullRenderDownload'); if (oldLink) oldLink.remove(); link.id = 'fullRenderDownload'; $('#review').append(link);
+    button.textContent = 'Render visual listo ✓';
+  } catch (error) {
+    note.textContent = error.message || 'No pudimos crear el render visual.'; note.style.color = '#d64632';
+    button.disabled = false; button.textContent = 'Render visual completo';
+  }
+}
+
 setSource('idea');
 $$('.source-tab[data-source]').forEach(button => button.addEventListener('click', () => setSource(button.dataset.source)));
 $$('.style-card').forEach(button => button.addEventListener('click', () => {
@@ -267,6 +329,7 @@ $('#downloadBtn').addEventListener('click', () => {
   URL.revokeObjectURL(link.href);
 });
 $('#renderTestBtn').addEventListener('click', createTestMp4);
+$('#renderFullBtn').addEventListener('click', createFullVisual);
 $('#queueRender').addEventListener('click', () => {
   if (!project) return;
   const button = $('#queueRender');
