@@ -6,6 +6,7 @@ module.exports = async (req, res) => {
   if (!secureEqual(email.trim().toLowerCase(), (process.env.AUTH_EMAIL || '').toLowerCase()) || !passwordMatches(password)) {
     return res.status(401).json({ error: 'Correo o contraseña incorrectos.' });
   }
-  res.setHeader('Set-Cookie', cookie(createSession(process.env.AUTH_EMAIL), 60 * 60 * 24 * 7));
-  return res.status(200).json({ ok: true });
+  const token = createSession(process.env.AUTH_EMAIL);
+  res.setHeader('Set-Cookie', cookie(token, 60 * 60 * 24 * 7));
+  return res.status(200).json({ ok: true, token });
 };

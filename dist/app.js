@@ -8,9 +8,10 @@ const loginError = $('#loginError');
 const loginBtn = $('#loginBtn');
 
 async function request(path, options = {}) {
+  const sessionToken = sessionStorage.getItem('clipforge_session');
   const response = await fetch(path, {
     credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    headers: { 'Content-Type': 'application/json', ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}), ...(options.headers || {}) },
     ...options
   });
   return { response, body: await response.json().catch(() => ({})) };
@@ -32,7 +33,7 @@ loginForm.addEventListener('submit', async event => {
     const { response, body } = await request('/api/login', {
       method: 'POST', body: JSON.stringify({ email: $('#email').value, password: $('#password').value })
     });
-    if (response.ok) { loginForm.reset(); showApp(); }
+    if (response.ok) { if (body.token) sessionStorage.setItem('clipforge_session', body.token); loginForm.reset(); showApp(); }
     else loginError.textContent = body.error || 'Correo o contraseña incorrectos.';
   } catch { loginError.textContent = 'No fue posible iniciar sesión. Revisa tu conexión e inténtalo de nuevo.'; }
   finally { loginBtn.disabled = false; loginBtn.innerHTML = 'Entrar a ClipForge <b>↗</b>'; }
@@ -40,6 +41,7 @@ loginForm.addEventListener('submit', async event => {
 
 $('#logoutBtn').addEventListener('click', async () => {
   await request('/api/logout', { method: 'POST' });
+  sessionStorage.removeItem('clipforge_session');
   app.hidden = true;
   loginGate.hidden = false;
   $('#email').focus();
