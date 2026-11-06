@@ -68,6 +68,7 @@ Debes devolver exactamente ${sceneCount} escenas. El texto hablado debe caber en
     if (!script?.title || !Array.isArray(script.scenes) || script.scenes.length !== sceneCount) throw new Error('Respuesta incompleta');
     return res.status(200).json({ script });
   } catch (error) {
+    console.error('ClipForge script generation failed:', error.message);
     return res.status(502).json({ error: 'No pudimos convertir la respuesta de IA en un guion. Inténtalo otra vez.' });
   }
 };
