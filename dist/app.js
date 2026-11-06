@@ -25,10 +25,11 @@ function clearSession() {
 
 async function request(path, options = {}) {
   const token = savedSession();
+  const { headers: extraHeaders, ...requestOptions } = options;
   const response = await fetch(path, {
     credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(options.headers || {}) },
-    ...options
+    ...requestOptions,
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(extraHeaders || {}) }
   });
   return { response, body: await response.json().catch(() => ({})) };
 }
@@ -169,6 +170,79 @@ async function renderProject() {
   $('#review').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
+function wrapText(context, text, maxWidth) {
+  const words = String(text || '').split(/\s+/);
+  const lines = [];
+  let line = '';
+  words.forEach(word => {
+    const next = line ? `${line} ${word}` : word;
+    if (context.measureText(next).width > maxWidth && line) { lines.push(line); line = word; }
+    else line = next;
+  });
+  if (line) lines.push(line);
+  return lines;
+}
+
+async function createTestMp4() {
+  if (!project) return;
+  const button = $('#renderTestBtn');
+  const note = $('.field-note');
+  if (!window.VideoEncoder || !window.VideoFrame) {
+    note.textContent = 'Este navegador no puede codificar MP4. Abre ClipForge en Chrome actualizado para generar la prueba.';
+    note.style.color = '#d64632';
+    return;
+  }
+  button.disabled = true;
+  button.textContent = 'Codificando prueba…';
+  try {
+    const { Muxer, ArrayBufferTarget } = await import('https://cdn.jsdelivr.net/npm/mp4-muxer@5.2.2/build/mp4-muxer.mjs');
+    const width = 540, height = 960, fps = 30, seconds = 12, frameDuration = 1_000_000 / fps;
+    const canvas = document.createElement('canvas');
+    canvas.width = width; canvas.height = height;
+    const context = canvas.getContext('2d');
+    const target = new ArrayBufferTarget();
+    const muxer = new Muxer({ target, fastStart: 'in-memory', video: { codec: 'avc', width, height, frameRate: fps } });
+    const encoder = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: error => { throw error; } });
+    const support = await VideoEncoder.isConfigSupported({ codec: 'avc1.42001f', width, height, bitrate: 1_600_000, framerate: fps });
+    if (!support.supported) throw new Error('Tu navegador no tiene codificador H.264 disponible.');
+    encoder.configure(support.config);
+    const totalFrames = seconds * fps;
+    for (let frameIndex = 0; frameIndex < totalFrames; frameIndex += 1) {
+      const sceneIndex = Math.min(project.scenes.length - 1, Math.floor(frameIndex / totalFrames * project.scenes.length));
+      const scene = project.scenes[sceneIndex];
+      const progress = frameIndex / totalFrames;
+      const gradient = context.createLinearGradient(0, 0, width, height);
+      gradient.addColorStop(0, '#17201a'); gradient.addColorStop(0.6, '#384a2e'); gradient.addColorStop(1, '#b7ef52');
+      context.fillStyle = gradient; context.fillRect(0, 0, width, height);
+      context.fillStyle = 'rgba(255,255,255,.1)'; context.beginPath(); context.arc(500 - progress * 230, 120 + progress * 90, 250, 0, Math.PI * 2); context.fill();
+      context.fillStyle = '#d7ff87'; context.font = '600 19px DM Mono, monospace'; context.fillText(`CLIPFORGE  /  ESCENA ${String(sceneIndex + 1).padStart(2, '0')}`, 42, 80);
+      context.fillStyle = '#f7f5ed'; context.font = '600 42px Georgia, serif';
+      let y = 180; wrapText(context, scene.title, 450).slice(0, 3).forEach(line => { context.fillText(line, 42, y); y += 53; });
+      context.fillStyle = 'rgba(9,15,11,.72)'; context.fillRect(34, 430, 472, 280);
+      context.fillStyle = '#ffffff'; context.font = '400 24px Arial, sans-serif';
+      y = 475; wrapText(context, scene.script, 420).slice(0, 7).forEach(line => { context.fillText(line, 60, y); y += 34; });
+      context.fillStyle = '#17201a'; context.fillRect(42, 850, 456 * progress, 8);
+      context.fillStyle = 'rgba(255,255,255,.78)'; context.font = '500 16px Arial, sans-serif'; context.fillText('PRUEBA SILENCIOSA · 12 SEGUNDOS', 42, 900);
+      const frame = new VideoFrame(canvas, { timestamp: Math.round(frameIndex * frameDuration), duration: Math.round(frameDuration) });
+      encoder.encode(frame, { keyFrame: frameIndex % fps === 0 });
+      frame.close();
+    }
+    await encoder.flush(); encoder.close(); muxer.finalize();
+    const mp4 = new Blob([target.buffer], { type: 'video/mp4' });
+    const { response, body } = await request('/api/upload-render', { method: 'POST', body: mp4, headers: { 'Content-Type': 'video/mp4', 'X-Project-Title': project.title } });
+    if (!response.ok) throw new Error(body.error || 'No pudimos guardar el MP4.');
+    const link = document.createElement('a'); link.href = body.downloadUrl || body.url; link.download = `${project.title || 'clipforge-prueba'}.mp4`; link.textContent = 'Descargar MP4 de prueba'; link.target = '_blank';
+    link.style.cssText = 'display:inline-block;margin-top:12px;font:600 12px DM Mono;color:#17201a;text-decoration:underline';
+    const oldLink = $('#renderDownload'); if (oldLink) oldLink.remove(); link.id = 'renderDownload'; $('#review').append(link);
+    button.textContent = 'MP4 listo ✓';
+  } catch (error) {
+    note.textContent = error.message || 'No pudimos crear la prueba MP4.';
+    note.style.color = '#d64632';
+    button.disabled = false;
+    button.textContent = 'MP4 de prueba · 12 s';
+  }
+}
+
 setSource('idea');
 $$('.source-tab[data-source]').forEach(button => button.addEventListener('click', () => setSource(button.dataset.source)));
 $$('.style-card').forEach(button => button.addEventListener('click', () => {
@@ -192,6 +266,7 @@ $('#downloadBtn').addEventListener('click', () => {
   link.click();
   URL.revokeObjectURL(link.href);
 });
+$('#renderTestBtn').addEventListener('click', createTestMp4);
 $('#queueRender').addEventListener('click', () => {
   if (!project) return;
   const button = $('#queueRender');
