@@ -3,12 +3,15 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ClipForge — de YouTube a clips</title>
-  <meta name="description" content="Convierte una idea de YouTube en un plan de videos cortos listo para producir." />
+  <title>ClipForge — estudio de guiones</title>
+  <meta name="description" content="Convierte ideas y referencias en guiones completos para Shorts, Reels y YouTube." />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./styles.css" />
+  <style>
+    .studio{padding:38px 0 82px}.studio-grid{display:grid;grid-template-columns:1.25fr .75fr;gap:18px;align-items:start}.panel{background:#fffdf8;border:1px solid var(--line);padding:24px}.panel.dark{background:var(--ink);color:var(--paper);border:0}.panel h2{font:600 30px/1.05 'Playfair Display';letter-spacing:-1px;margin:0 0 10px}.panel p{color:var(--muted);font-size:14px;line-height:1.5}.panel.dark p{color:#bbc0ba}.source-tabs,.format-tabs,.style-grid{display:flex;gap:8px;flex-wrap:wrap}.source-tab,.format-tab,.style-card{border:1px solid var(--line);background:transparent;padding:10px 12px;color:var(--ink)}.source-tab.active,.format-tab.active{background:var(--ink);color:var(--paper);border-color:var(--ink)}.source-body{margin-top:18px}.source-body textarea,.source-body input{width:100%;min-height:142px;padding:14px;border:1px solid var(--line);font:400 15px/1.5 'DM Sans';background:#fff}.source-body input{min-height:50px}.field-note{display:block;color:var(--muted);font-size:11px;margin-top:8px}.select-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:17px 0}.select-row label,.review-field label{display:grid;gap:6px;font:500 10px 'DM Mono';letter-spacing:.8px}.select-row select{padding:11px;border:1px solid var(--line);background:#fff;font:400 14px 'DM Sans'}.create-script{width:100%;min-height:50px;background:var(--acid);color:var(--ink);font-size:14px}.style-card{flex:1 1 140px;text-align:left;min-height:92px}.style-card strong{display:block;font-size:13px}.style-card small{display:block;color:var(--muted);font-size:11px;line-height:1.3;margin-top:5px}.style-card.active{border:2px solid var(--acid);background:#34402a;color:#fff}.style-card.active small{color:#d9e8ca}.step-list{display:grid;gap:13px;margin-top:22px}.step{display:flex;gap:11px;padding-bottom:13px;border-bottom:1px solid #3a4540}.step:last-child{border:0}.step b{color:var(--acid);font:500 11px 'DM Mono'}.step span{font-size:13px;line-height:1.35}.queue-note{margin-top:22px;padding:13px;border-left:2px solid var(--acid);font-size:12px;line-height:1.45;color:#d7dbd7}.review{margin-top:30px;border-top:2px solid var(--ink);padding-top:22px}.review-head{display:flex;justify-content:space-between;gap:20px;align-items:end;margin-bottom:15px}.review h2{font:600 39px/1 'Playfair Display';letter-spacing:-1.5px;margin:0}.review-toolbar{display:flex;gap:8px}.review-output{display:grid;grid-template-columns:1fr 1fr;gap:14px}.review-card{border:1px solid var(--line);padding:19px;background:#fffdf8}.review-card h3{font:600 22px/1.05 'Playfair Display';margin:5px 0 10px}.review-card .time{color:var(--red);font:500 10px 'DM Mono'}.review-card textarea{width:100%;min-height:150px;border:0;border-top:1px solid var(--line);padding:12px 0 0;resize:vertical;font:400 14px/1.55 'DM Sans';background:transparent}.review-card .direction{font-size:11px;color:var(--muted);margin-top:10px}.render-bar{display:flex;align-items:center;justify-content:space-between;gap:16px;background:var(--acid);padding:20px;margin-top:18px}.render-bar strong{font:600 18px/1.1 'Playfair Display'}.render-bar p{font-size:12px;margin:4px 0 0}.render-bar button{background:var(--ink);color:var(--paper);padding:13px 16px}.login-card p{color:var(--muted)}@media(max-width:800px){.studio-grid,.review-output{grid-template-columns:1fr}.select-row{grid-template-columns:1fr}.review-head,.render-bar{align-items:start;flex-direction:column}.panel{padding:18px}}
+  </style>
 </head>
 <body>
   <div class="noise"></div>
@@ -17,7 +20,7 @@
       <a class="brand" href="#">clip<span>forge</span><i></i></a>
       <div class="eyebrow">ACCESO PRIVADO</div>
       <h1 id="loginTitle">Tu próxima pieza<br><em>empieza aquí.</em></h1>
-      <p>Inicia sesión para transformar un episodio de YouTube en clips listos para editar.</p>
+      <p>Inicia sesión para crear guiones, revisar escenas y producir videos con IA.</p>
       <label>Correo electrónico<input id="email" type="email" autocomplete="username" required placeholder="nombre@correo.com" /></label>
       <label>Contraseña<input id="password" type="password" autocomplete="current-password" required placeholder="••••••••••" /></label>
       <p class="login-error" id="loginError" role="alert"></p>
@@ -26,57 +29,11 @@
     </form>
   </section>
   <main id="app" hidden>
-    <nav><a class="brand" href="#">clip<span>forge</span><i></i></a><div class="nav-controls"><span class="nav-note">ESTUDIO DE CORTOS · v1.0</span><button class="logout" id="logoutBtn">Salir</button></div></nav>
-    <section class="hero">
-      <div class="eyebrow">DE UN VIDEO LARGO A UNA SERIE QUE RETIENE</div>
-      <h1>Encuentra los <em>momentos</em><br>que merecen otra vida.</h1>
-      <p class="lead">Pega un video de YouTube. ClipForge estructura el ángulo, los ganchos y los cortes para convertirlo en shorts que la gente termina.</p>
-    </section>
-
-    <section class="workbench" aria-label="Crear plan de clips">
-      <div class="input-label"><span>01</span> FUENTE</div>
-      <div class="url-row">
-        <input id="youtubeUrl" type="url" autocomplete="off" placeholder="Pega aquí una URL de YouTube…" aria-label="URL del video de YouTube" />
-        <button id="analyzeBtn">Crear plan <b>↗</b></button>
-      </div>
-      <div class="source-meta">
-        <label>Nombre del episodio <input id="episodeTitle" placeholder="Opcional — ej. Cómo duplicar tu foco" /></label>
-        <div class="platforms"><span>FORMATO</span><button class="pill active" data-format="9:16">9:16</button><button class="pill" data-format="1:1">1:1</button><button class="pill" data-format="16:9">16:9</button></div>
-      </div>
-      <p class="hint" id="hint">Funciona con enlaces youtube.com y youtu.be. El resultado es un plan creativo; conecta una transcripción para seleccionar los segundos exactos.</p>
-    </section>
-
-    <section class="flow" aria-label="Cómo funciona">
-      <article><b>01</b><h2>Encuentra la tensión</h2><p>Identifica promesas, sorpresas, objeciones y aprendizajes dentro del episodio.</p></article>
-      <article><b>02</b><h2>Diseña el corte</h2><p>Da a cada clip una tesis, un hook y un final que invita a continuar.</p></article>
-      <article><b>03</b><h2>Produce con intención</h2><p>Exporta una guía clara para edición, subtítulos, título y CTA.</p></article>
-    </section>
-
-    <section class="results" id="results" hidden aria-live="polite">
-      <div class="results-head"><div><div class="eyebrow">02 · ESTRATEGIA GENERADA</div><h2 id="resultTitle">Plan de clips</h2></div><div class="head-actions"><button class="ghost" id="copyBtn">Copiar plan</button><button class="ghost" id="downloadBtn">Exportar JSON</button></div></div>
-      <div class="strategy" id="strategy"></div>
-      <div class="clip-grid" id="clipGrid"></div>
-      <div class="next-step"><span>LISTO PARA EL SIGUIENTE PASO</span><strong>Conecta la transcripción del video para convertir estas ventanas creativas en timecodes de edición.</strong><button id="addTranscript">Añadir transcripción</button></div>
-    </section>
+    <nav><a class="brand" href="#">clip<span>forge</span><i></i></a><div class="nav-controls"><span class="nav-note">ESTUDIO DE GUIONES · v2.0</span><button class="logout" id="logoutBtn">Salir</button></div></nav>
+    <section class="hero"><div class="eyebrow">DE BRIEF A GUION, DE GUION A VIDEO</div><h1>Una idea.<br><em>Todo el sistema</em> para producirla.</h1><p class="lead">Crea, adapta y revisa guiones para Shorts, Reels y YouTube. Después envíalos a una cola de producción para generar el MP4 final.</p></section>
+    <section class="studio" aria-label="Nuevo proyecto"><div class="studio-grid"><div class="panel"><div class="eyebrow">01 · MATERIAL DE PARTIDA</div><h2>¿Con qué quieres empezar?</h2><div class="source-tabs"><button class="source-tab active" data-source="idea">Idea</button><button class="source-tab" data-source="youtube">URL de YouTube</button><button class="source-tab" data-source="text">Texto</button><button class="source-tab" data-source="pdf">PDF</button><button class="source-tab" data-source="transcript">Transcripción</button></div><div class="source-body" id="sourceBody"></div><div class="select-row"><label>FORMATO<select id="format"><option value="short">Short / Reel · 45–60 s</option><option value="long">YouTube · 4–5 min</option></select></label><label>IDIOMA Y ADAPTACIÓN<select id="language"><option value="Español latino">Español latino</option><option value="Español colombiano">Español colombiano</option><option value="Inglés (EE. UU.)">Inglés (EE. UU.)</option><option value="Portugués brasileño">Portugués brasileño</option></select></label></div><div class="eyebrow">ESTILO VISUAL</div><div class="style-grid" id="styleGrid"><button class="style-card active" data-style="UGC"><strong>UGC</strong><small>Natural, cercano y móvil</small></button><button class="style-card" data-style="Faceless"><strong>Faceless / B-roll</strong><small>Narración + visuales de apoyo</small></button><button class="style-card" data-style="Podcast"><strong>Podcast subtitulado</strong><small>Conversación, cortes y captions</small></button><button class="style-card" data-style="Educativo"><strong>Educativo</strong><small>Marco visual limpio y didáctico</small></button><button class="style-card" data-style="Direct response"><strong>Anuncio directo</strong><small>Oferta, prueba y CTA</small></button></div><button class="create-script" id="createScript">Crear guion para revisión <b>↗</b></button></div><aside class="panel dark"><div class="eyebrow">FLUJO DE PRODUCCIÓN</div><h2>Revisa antes de gastar en render.</h2><p>El sistema adapta idioma y estructura automáticamente según tu selección.</p><div class="step-list"><div class="step"><b>01</b><span>Analiza la idea o referencia.</span></div><div class="step"><b>02</b><span>Genera guion, escenas, visuales, subtítulos y CTA.</span></div><div class="step"><b>03</b><span>Revisas y editas cada bloque.</span></div><div class="step"><b>04</b><span>Apruebas el render MP4 con voz, avatar o B-roll.</span></div></div><div class="queue-note">Los videos clippeados mantendrán una ruta separada: referencia creativa o recorte/reedición de material autorizado.</div></aside></div></section>
+    <section class="review" id="review" hidden aria-live="polite"><div class="review-head"><div><div class="eyebrow">02 · REVISIÓN DE GUION</div><h2 id="scriptTitle">Guion listo para revisar</h2></div><div class="review-toolbar"><button class="ghost" id="copyBtn">Copiar</button><button class="ghost" id="downloadBtn">Exportar JSON</button></div></div><div class="strategy" id="strategy"></div><div class="review-output" id="scriptOutput"></div><div class="render-bar"><div><span class="eyebrow">03 · PRODUCCIÓN</span><strong>Aprueba esta versión para crear el MP4.</strong><p>Podrás elegir voz IA, audio propio o avatar en la siguiente etapa.</p></div><button id="queueRender">Enviar a cola de render</button></div></section>
   </main>
-  <template id="clipTemplate">
-    <article class="clip-card">
-      <div class="clip-top"><span class="clip-number"></span><span class="score"></span></div>
-      <div class="duration"></div><h3></h3><p class="thesis"></p>
-      <div class="script"><span>HOOK</span><q></q></div>
-      <div class="details"><span class="cut"></span><span class="cta"></span></div>
-    </article>
-  </template>
-  <dialog id="transcriptDialog" aria-labelledby="transcriptTitle">
-    <form method="dialog" class="dialog-card">
-      <button class="dialog-close" value="cancel" aria-label="Cerrar">×</button>
-      <div class="eyebrow">03 · TIME CODES REALES</div>
-      <h2 id="transcriptTitle">Pega la transcripción<br><em>con sus tiempos.</em></h2>
-      <p>Admite líneas como <code>00:35 - La idea empieza aquí</code> o <code>[01:12] Otra idea.</code> ClipForge usará cada bloque para ubicar los cortes.</p>
-      <textarea id="transcriptText" placeholder="00:00 - Introducción&#10;00:28 - El primer problema es…&#10;01:14 - Aquí cambia todo…"></textarea>
-      <div class="dialog-actions"><span id="transcriptStatus"></span><button class="ghost" value="cancel">Ahora no</button><button class="save-transcript" id="saveTranscript" value="default">Analizar transcripción ↗</button></div>
-    </form>
-  </dialog>
   <footer>CLIPFORGE · HAZ QUE CADA IDEA TRABAJE DOS VECES</footer>
   <script src="./app.js"></script>
 </body>

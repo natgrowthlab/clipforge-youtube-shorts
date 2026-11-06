@@ -1,55 +1,165 @@
-const $ = s => document.querySelector(s);
-const app=$('#app'), loginGate=$('#loginGate'), loginForm=$('#loginForm'), loginError=$('#loginError'), loginBtn=$('#loginBtn');
-function showApp(){loginGate.hidden=true;app.hidden=false;}
-async function request(path, options={}){const response=await fetch(path,{credentials:'same-origin',headers:{'Content-Type':'application/json',...(options.headers||{})},...options});const body=await response.json().catch(()=>({}));return {response,body}}
-async function checkSession(){try{const {response}=await request('/api/session');if(response.ok){showApp()}}catch{loginError.textContent='No fue posible conectar con el acceso. Inténtalo de nuevo.'}}
-loginForm.addEventListener('submit',async event=>{event.preventDefault();loginError.textContent='';loginBtn.disabled=true;loginBtn.textContent='Comprobando…';try{const {response,body}=await request('/api/login',{method:'POST',body:JSON.stringify({email:$('#email').value,password:$('#password').value})});if(response.ok){loginForm.reset();showApp()}else{loginError.textContent=body.error||'No se pudo iniciar sesión.'}}catch{loginError.textContent='No fue posible iniciar sesión.'}finally{loginBtn.disabled=false;loginBtn.innerHTML='Entrar a ClipForge <b>↗</b>'}});
-$('#logoutBtn').addEventListener('click',async()=>{await request('/api/logout',{method:'POST'});app.hidden=true;loginGate.hidden=false;$('#email').focus()});
-checkSession();
-const clips = [
-  {title:'La creencia que te frena', duration:'00:18 — 00:52 · 34 s', thesis:'Abre con la fricción más reconocible y cambia la perspectiva rápido.', hook:'Si todavía haces esto para avanzar, estás perdiendo tiempo.', cut:'CORTE: reacción + ejemplo', cta:'CTA: ¿Te pasa?', score:'RETENCIÓN 92%'},
-  {title:'El método en 3 pasos', duration:'03:14 — 04:00 · 46 s', thesis:'Una pieza guardable: marco simple, ritmo ágil y texto en pantalla.', hook:'No necesitas más disciplina. Necesitas este orden.', cut:'CORTE: 3 beats visuales', cta:'CTA: Guárdalo', score:'GUARDADOS ALTO'},
-  {title:'La objeción incómoda', duration:'08:40 — 09:27 · 47 s', thesis:'Convierte la duda natural de la audiencia en una conversación.', hook:'“Eso suena bien, pero no funciona para mí.” Justo por eso.', cut:'CORTE: pausa antes del giro', cta:'CTA: Debate abajo', score:'COMENTARIOS ALTO'},
-  {title:'La frase que se queda', duration:'12:06 — 12:36 · 30 s', thesis:'Una idea contundente, aislada del contexto y diseñada para compartir.', hook:'Tu problema no es falta de tiempo; es falta de decisión.', cut:'CORTE: punch-in al remate', cta:'CTA: Envíalo a alguien', score:'COMPARTIBLE'},
-  {title:'El cierre con promesa', duration:'16:21 — 17:10 · 49 s', thesis:'Cierra la serie con una transformación concreta y un siguiente paso.', hook:'Cuando entiendes esto, todo el sistema se vuelve más ligero.', cut:'CORTE: antes / después', cta:'CTA: Parte 2', score:'SERIE POTENCIAL'}
-];
-const demoTranscript = `00:00 - Hoy quiero hablarte de la idea que casi todos tienen sobre avanzar más rápido.
-00:28 - El primer problema es que confundes movimiento con progreso.
-01:14 - La mayoría abre diez frentes y luego llama a eso ambición.
-02:06 - Cuando hay demasiadas opciones, la energía se va en decidir.
-03:14 - El método empieza por elegir una sola palanca para esta semana.
-04:00 - Después defines la señal que te dirá si funcionó.
-05:18 - Esto no es falta de disciplina; es falta de un orden visible.
-06:42 - La objeción que siempre aparece es: mi caso es diferente.
-08:40 - Precisamente porque tu caso es diferente, necesitas un criterio.
-10:04 - Una buena decisión elimina muchas decisiones pequeñas.
-12:06 - Tu problema no es falta de tiempo; es falta de decisión.
-14:22 - Si cambias el orden, cambias la experiencia completa.
-16:21 - Cuando entiendes esto, todo el sistema se vuelve más ligero.`;
-function videoId(value){const m=value.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|shorts\/|embed\/))([\w-]{6,})/);return m?.[1]}
-function titleFrom(id){return id ? `Episodio ${id.slice(0,6).toUpperCase()}` : 'Tu episodio'}
-function renderPlan(){
- const url=$('#youtubeUrl').value.trim(), id=videoId(url), supplied=$('#episodeTitle').value.trim();
- const hint=$('#hint');
- if(!id){hint.textContent='Revisa el enlace: usa una URL pública de youtube.com o youtu.be.';hint.style.color='#ff9d8e';$('#youtubeUrl').focus();return}
- hint.style.color=''; hint.textContent='Plan generado. Las ventanas son creativas hasta que añadas una transcripción con timecodes.';
- const name=supplied || titleFrom(id), format=document.querySelector('.pill.active').dataset.format;
- $('#resultTitle').textContent=`${name}: 5 clips para ${format}`;
- $('#strategy').innerHTML=`<div><label>ÁNGULO CENTRAL</label><p>Convertir una idea densa en una secuencia de descubrimientos cortos.</p></div><div><label>AUDIENCIA</label><p>Personas curiosas que quieren una respuesta clara, no un resumen.</p></div><div><label>ARCO DE PUBLICACIÓN</label><p>Dolor → método → objeción → frase → promesa.</p></div>`;
- const grid=$('#clipGrid'); grid.innerHTML=''; const template=$('#clipTemplate');
- clips.forEach((c,i)=>{const node=template.content.cloneNode(true);node.querySelector('.clip-number').textContent=`CLIP ${String(i+1).padStart(2,'0')}`;node.querySelector('.score').textContent=c.score;node.querySelector('.duration').textContent=c.duration;node.querySelector('h3').textContent=c.title;node.querySelector('.thesis').textContent=c.thesis;node.querySelector('q').textContent=c.hook;node.querySelector('.cut').textContent=c.cut;node.querySelector('.cta').textContent=c.cta;grid.append(node)});
- $('#results').hidden=false;$('#results').scrollIntoView({behavior:'smooth',block:'start'});
- window.currentPlan={source:url,videoId:id,episode:name,format,clips};
+const $ = selector => document.querySelector(selector);
+const $$ = selector => [...document.querySelectorAll(selector)];
+
+const app = $('#app');
+const loginGate = $('#loginGate');
+const loginForm = $('#loginForm');
+const loginError = $('#loginError');
+const loginBtn = $('#loginBtn');
+
+async function request(path, options = {}) {
+  const response = await fetch(path, {
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    ...options
+  });
+  return { response, body: await response.json().catch(() => ({})) };
 }
-$('#analyzeBtn').addEventListener('click',renderPlan);
-$('#youtubeUrl').addEventListener('keydown',e=>{if(e.key==='Enter')renderPlan()});
-document.querySelectorAll('.pill').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.pill').forEach(x=>x.classList.remove('active'));b.classList.add('active')}));
-$('#copyBtn').addEventListener('click',async()=>{if(!window.currentPlan)return;const t=window.currentPlan.clips.map((c,i)=>`${i+1}. ${c.title}\n${c.hook}\n${c.duration}\n${c.cta}`).join('\n\n');await navigator.clipboard.writeText(`PLAN · ${window.currentPlan.episode}\n\n${t}`);$('#copyBtn').textContent='Copiado ✓';setTimeout(()=>$('#copyBtn').textContent='Copiar plan',1600)});
-$('#downloadBtn').addEventListener('click',()=>{if(!window.currentPlan)return;const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(window.currentPlan,null,2)],{type:'application/json'}));a.download='clipforge-plan.json';a.click();URL.revokeObjectURL(a.href)});
-const dialog=$('#transcriptDialog');
-function seconds(time){const p=time.split(':').map(Number);return p.length===3?p[0]*3600+p[1]*60+p[2]:p[0]*60+p[1]}
-function stamp(n){return `${String(Math.floor(n/60)).padStart(2,'0')}:${String(n%60).padStart(2,'0')}`}
-function parseTranscript(text){return text.split('\n').map(line=>{const m=line.match(/(?:\[)?(\d{1,2}:\d{2}(?::\d{2})?)(?:\])?\s*(?:-|–|—)?\s*(.*)/);return m?{time:seconds(m[1]),text:m[2].trim()}:null}).filter(Boolean)}
-function addRealTimecodes(text){const rows=parseTranscript(text);if(rows.length<3){$('#transcriptStatus').textContent='Añade al menos 3 líneas con tiempo.';return false}const cards=[...document.querySelectorAll('.clip-card')];cards.forEach((card,i)=>{const point=rows[Math.min(Math.floor((i+1)*rows.length/6),rows.length-1)];const end=rows[Math.min(Math.floor((i+2)*rows.length/6),rows.length-1)]||{time:point.time+38};card.querySelector('.duration').textContent=`${stamp(point.time)} — ${stamp(Math.max(point.time+20,end.time))} · CORTE REAL`;card.querySelector('.thesis').textContent=point.text||card.querySelector('.thesis').textContent});window.currentPlan.transcript=text;window.currentPlan.timecoded=true;localStorage.setItem('clipforge-transcript',text);$('#addTranscript').textContent='Timecodes aplicados ✓';$('#transcriptStatus').textContent=`${rows.length} segmentos procesados`;return true}
-$('#addTranscript').addEventListener('click',()=>{const saved=localStorage.getItem('clipforge-transcript');$('#transcriptText').value=saved||demoTranscript;$('#transcriptStatus').textContent='';dialog.showModal()});
-$('#saveTranscript').addEventListener('click',event=>{event.preventDefault();if(addRealTimecodes($('#transcriptText').value)){dialog.close()}});
+
+function showApp() { loginGate.hidden = true; app.hidden = false; }
+
+async function checkSession() {
+  try { if ((await request('/api/session')).response.ok) showApp(); }
+  catch { loginError.textContent = 'No fue posible conectar con el acceso. Inténtalo de nuevo.'; }
+}
+
+loginForm.addEventListener('submit', async event => {
+  event.preventDefault();
+  loginError.textContent = '';
+  loginBtn.disabled = true;
+  loginBtn.textContent = 'Comprobando…';
+  try {
+    const { response, body } = await request('/api/login', {
+      method: 'POST', body: JSON.stringify({ email: $('#email').value, password: $('#password').value })
+    });
+    if (response.ok) { loginForm.reset(); showApp(); }
+    else loginError.textContent = body.error || 'Correo o contraseña incorrectos.';
+  } catch { loginError.textContent = 'No fue posible iniciar sesión. Revisa tu conexión e inténtalo de nuevo.'; }
+  finally { loginBtn.disabled = false; loginBtn.innerHTML = 'Entrar a ClipForge <b>↗</b>'; }
+});
+
+$('#logoutBtn').addEventListener('click', async () => {
+  await request('/api/logout', { method: 'POST' });
+  app.hidden = true;
+  loginGate.hidden = false;
+  $('#email').focus();
+});
+
+const sourceTemplates = {
+  idea: `<textarea id="sourceInput" placeholder="Ej. Cómo dejar de posponer lo importante cuando tienes demasiadas tareas y poco tiempo."></textarea><span class="field-note">Describe el tema, a quién va dirigido o el resultado que quieres lograr.</span>`,
+  youtube: `<input id="sourceInput" type="url" placeholder="https://youtube.com/watch?v=…" /><div class="source-tabs" style="margin-top:10px"><button class="source-tab active" data-youtube-mode="reference">Usar como referencia</button><button class="source-tab" data-youtube-mode="clip">Cortar y reeditar</button></div><span class="field-note" id="youtubeNote">La IA analizará estructura, tema y ángulo para proponer contenido nuevo.</span>`,
+  text: `<textarea id="sourceInput" placeholder="Pega aquí tu artículo, notas, brief o post."></textarea><span class="field-note">El sistema extraerá la idea central, los argumentos y las frases aprovechables.</span>`,
+  pdf: `<input id="sourceInput" type="file" accept="application/pdf" /><span class="field-note">El archivo se guardará de forma privada en Vercel Blob al conectar el almacenamiento.</span>`,
+  transcript: `<textarea id="sourceInput" placeholder="00:00 — Introducción\n00:28 — Idea principal\n01:14 — Ejemplo…"></textarea><span class="field-note">Incluye tiempos si quieres usar la transcripción para un futuro recorte de video.</span>`
+};
+
+let sourceType = 'idea';
+let visualStyle = 'UGC';
+let youtubeMode = 'reference';
+let project = null;
+
+function setSource(type) {
+  sourceType = type;
+  $$('.source-tab[data-source]').forEach(button => button.classList.toggle('active', button.dataset.source === type));
+  $('#sourceBody').innerHTML = sourceTemplates[type];
+  if (type === 'youtube') {
+    $$('.source-tab[data-youtube-mode]').forEach(button => button.addEventListener('click', () => {
+      youtubeMode = button.dataset.youtubeMode;
+      $$('.source-tab[data-youtube-mode]').forEach(item => item.classList.toggle('active', item === button));
+      $('#youtubeNote').textContent = youtubeMode === 'reference'
+        ? 'La IA analizará estructura, tema y ángulo para proponer contenido nuevo.'
+        : 'Usa solo material propio o autorizado. Se preparará una ruta de clips y reedición.';
+    }));
+  }
+}
+
+function spokenLanguage(language) {
+  return { 'Español latino': 'español latino natural', 'Español colombiano': 'español colombiano cercano', 'Inglés (EE. UU.)': 'inglés estadounidense natural', 'Portugués brasileño': 'portugués brasileño natural' }[language];
+}
+
+function clean(value) { return value.trim().replace(/\s+/g, ' '); }
+function cap(value) { return value.charAt(0).toUpperCase() + value.slice(1); }
+
+function buildScenes(brief, format, language, style) {
+  const subject = clean(brief);
+  const languageNote = `Habla en ${spokenLanguage(language)}.`;
+  const directions = {
+    UGC: 'Plano vertical de mano, luz natural y texto grande en pantalla.',
+    Faceless: 'B-roll de apoyo, voz en off y captions dinámicos.',
+    Podcast: 'Plano conversacional, cambios de encuadre y subtítulos centrados.',
+    Educativo: 'Plano limpio, gráficos simples y palabras clave destacadas.',
+    'Direct response': 'Ritmo rápido, promesa concreta, prueba visual y CTA visible.'
+  };
+  const long = format === 'long';
+  const scripts = long ? [
+    ['00:00–00:25', 'Hook y promesa', `“${cap(subject)}. Si esto te está costando, probablemente no es por falta de disciplina: es porque estás usando el enfoque equivocado.”`],
+    ['00:25–01:10', 'El problema', `“La mayoría trata de resolverlo haciendo más. Pero eso solo crea más presión y menos claridad. Primero necesitamos identificar qué está bloqueando el siguiente paso.”`],
+    ['01:10–02:35', 'La idea central', `“La clave es simplificar: toma ${subject.toLowerCase()} y conviértelo en una decisión pequeña, visible y medible. Eso cambia la forma en que avanzas.”`],
+    ['02:35–03:45', 'Ejemplo aplicable', `“Imagina que mañana tienes poco tiempo. No busques terminarlo todo; busca una señal de progreso. Esa señal te ayuda a ajustar sin abandonar.”`],
+    ['03:45–04:50', 'Cierre y CTA', `“Quédate con esto: ${subject}. Prueba una acción esta semana y observa qué cambia. Si quieres volver a aplicarlo, guarda este video.”`]
+  ] : [
+    ['00:00–00:05', 'Hook', `“Si ${subject.toLowerCase()} te está frenando, escucha esto.”`],
+    ['00:05–00:15', 'Tensión', `“La mayoría intenta arreglarlo haciendo más. Pero el problema no es esfuerzo: es no tener un siguiente paso claro.”`],
+    ['00:15–00:38', 'Valor', `“Haz esto: define una acción mínima, ejecútala hoy y mide una sola señal. No necesitas un plan perfecto; necesitas movimiento con intención.”`],
+    ['00:38–00:55', 'Remate + CTA', `“No se trata de resolver ${subject.toLowerCase()} de una vez. Se trata de empezar de una forma que puedas repetir. Guárdalo para aplicarlo.”`]
+  ];
+  return scripts.map(([time, title, script]) => ({ time, title, script, direction: `${directions[style]} ${languageNote}` }));
+}
+
+function renderProject() {
+  const input = $('#sourceInput');
+  const raw = input?.type === 'file' ? input.files?.[0]?.name : input?.value;
+  if (!raw || clean(raw).length < 10) {
+    const note = $('.field-note') || $('#sourceBody');
+    note.textContent = 'Añade una idea, texto o referencia más concreta para crear el guion.';
+    note.style.color = '#d64632';
+    return;
+  }
+  const format = $('#format').value;
+  const language = $('#language').value;
+  const scenes = buildScenes(raw, format, language, visualStyle);
+  project = { sourceType, source: raw, youtubeMode, format, language, visualStyle, scenes, status: 'revisión' };
+  $('#scriptTitle').textContent = `${format === 'long' ? 'Video 4–5 min' : 'Short / Reel'} · ${cap(clean(raw)).slice(0, 76)}`;
+  $('#strategy').innerHTML = `<div><label>ORIGEN</label><p>${sourceType === 'youtube' ? `YouTube · ${youtubeMode === 'clip' ? 'recorte autorizado' : 'referencia creativa'}` : cap(sourceType)}</p></div><div><label>ADAPTACIÓN</label><p>${language}</p></div><div><label>ESTILO</label><p>${visualStyle}</p></div>`;
+  const output = $('#scriptOutput');
+  output.innerHTML = '';
+  scenes.forEach((scene, index) => {
+    const card = document.createElement('article');
+    card.className = 'review-card';
+    card.innerHTML = `<div class="time">ESCENA ${String(index + 1).padStart(2, '0')} · ${scene.time}</div><h3>${scene.title}</h3><textarea aria-label="Texto de escena ${index + 1}">${scene.script}</textarea><p class="direction">DIRECCIÓN: ${scene.direction}</p>`;
+    output.append(card);
+  });
+  $('#review').hidden = false;
+  $('#review').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+setSource('idea');
+$$('.source-tab[data-source]').forEach(button => button.addEventListener('click', () => setSource(button.dataset.source)));
+$$('.style-card').forEach(button => button.addEventListener('click', () => {
+  visualStyle = button.dataset.style;
+  $$('.style-card').forEach(item => item.classList.toggle('active', item === button));
+}));
+$('#createScript').addEventListener('click', renderProject);
+$('#copyBtn').addEventListener('click', async () => {
+  if (!project) return;
+  const edited = $$('.review-card textarea').map((field, index) => ({ ...project.scenes[index], script: field.value }));
+  await navigator.clipboard.writeText(edited.map(scene => `${scene.time} · ${scene.title}\n${scene.script}\nDirección: ${scene.direction}`).join('\n\n'));
+  $('#copyBtn').textContent = 'Copiado ✓';
+  setTimeout(() => { $('#copyBtn').textContent = 'Copiar'; }, 1400);
+});
+$('#downloadBtn').addEventListener('click', () => {
+  if (!project) return;
+  project.scenes = $$('.review-card textarea').map((field, index) => ({ ...project.scenes[index], script: field.value }));
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' }));
+  link.download = 'clipforge-proyecto.json';
+  link.click();
+  URL.revokeObjectURL(link.href);
+});
+$('#queueRender').addEventListener('click', () => {
+  if (!project) return;
+  const button = $('#queueRender');
+  button.textContent = 'Pendiente de clave de producción';
+  button.disabled = true;
+  project.status = 'pendiente de render';
+});
