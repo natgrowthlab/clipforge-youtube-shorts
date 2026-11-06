@@ -6,12 +6,28 @@ const loginGate = $('#loginGate');
 const loginForm = $('#loginForm');
 const loginError = $('#loginError');
 const loginBtn = $('#loginBtn');
+let sessionToken = null;
+
+function savedSession() {
+  try { return window.sessionStorage?.getItem('clipforge_session') || sessionToken; }
+  catch { return sessionToken; }
+}
+
+function saveSession(token) {
+  sessionToken = token;
+  try { window.sessionStorage?.setItem('clipforge_session', token); } catch {}
+}
+
+function clearSession() {
+  sessionToken = null;
+  try { window.sessionStorage?.removeItem('clipforge_session'); } catch {}
+}
 
 async function request(path, options = {}) {
-  const sessionToken = sessionStorage.getItem('clipforge_session');
+  const token = savedSession();
   const response = await fetch(path, {
     credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json', ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}), ...(options.headers || {}) },
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(options.headers || {}) },
     ...options
   });
   return { response, body: await response.json().catch(() => ({})) };
@@ -33,7 +49,7 @@ loginForm.addEventListener('submit', async event => {
     const { response, body } = await request('/api/login', {
       method: 'POST', body: JSON.stringify({ email: $('#email').value, password: $('#password').value })
     });
-    if (response.ok) { if (body.token) sessionStorage.setItem('clipforge_session', body.token); loginForm.reset(); showApp(); }
+    if (response.ok) { if (body.token) saveSession(body.token); loginForm.reset(); showApp(); }
     else loginError.textContent = body.error || 'Correo o contraseña incorrectos.';
   } catch { loginError.textContent = 'No fue posible iniciar sesión. Revisa tu conexión e inténtalo de nuevo.'; }
   finally { loginBtn.disabled = false; loginBtn.innerHTML = 'Entrar a ClipForge <b>↗</b>'; }
@@ -41,7 +57,7 @@ loginForm.addEventListener('submit', async event => {
 
 $('#logoutBtn').addEventListener('click', async () => {
   await request('/api/logout', { method: 'POST' });
-  sessionStorage.removeItem('clipforge_session');
+  clearSession();
   app.hidden = true;
   loginGate.hidden = false;
   $('#email').focus();
