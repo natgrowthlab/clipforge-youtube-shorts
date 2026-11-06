@@ -35,6 +35,7 @@ async function request(path, options = {}) {
 }
 
 function showApp() { loginGate.hidden = true; app.hidden = false; loadQueue(); }
+setInterval(() => { if (!app.hidden) loadQueue(); }, 15000);
 
 async function checkSession() {
   try { if ((await request('/api/session')).response.ok) showApp(); }
