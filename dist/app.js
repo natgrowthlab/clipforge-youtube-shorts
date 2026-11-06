@@ -330,6 +330,76 @@ async function createAiVoice() {
   }
 }
 
+async function composeMp4WithVoice() {
+  if (!project) return;
+  const audioUrl = $('#voiceOutput audio')?.src;
+  const button = $('#composeBtn');
+  const note = $('.field-note');
+  if (!audioUrl) {
+    note.textContent = 'Primero genera una voz IA para este guion.'; note.style.color = '#d64632';
+    return;
+  }
+  if (!window.VideoEncoder || !window.AudioEncoder || !window.AudioData || !window.VideoFrame) {
+    note.textContent = 'Este navegador no puede componer audio y video. Abre ClipForge en Chrome actualizado.'; note.style.color = '#d64632';
+    return;
+  }
+  button.disabled = true; button.textContent = 'Preparando audio…';
+  try {
+    const audioResponse = await fetch(audioUrl);
+    if (!audioResponse.ok) throw new Error('No pudimos cargar la narración generada.');
+    const audioContext = new AudioContext();
+    const audioBuffer = await audioContext.decodeAudioData(await audioResponse.arrayBuffer());
+    await audioContext.close();
+    const { Muxer, ArrayBufferTarget } = await import('https://cdn.jsdelivr.net/npm/mp4-muxer@5.2.2/build/mp4-muxer.mjs');
+    const { upload } = await import('https://esm.sh/@vercel/blob@2.8.2/client');
+    const isLong = project.format === 'long';
+    const width = isLong ? 1280 : 540, height = isLong ? 720 : 960, fps = isLong ? 5 : 10;
+    const minDuration = isLong ? 240 : 45, maxDuration = isLong ? 300 : 60;
+    const seconds = Math.max(minDuration, Math.min(maxDuration, Math.ceil(audioBuffer.duration)));
+    const frameDuration = 1_000_000 / fps, sampleRate = audioBuffer.sampleRate, channels = Math.min(2, audioBuffer.numberOfChannels);
+    const videoConfig = { codec: 'avc1.42001f', width, height, bitrate: isLong ? 280_000 : 450_000, framerate: fps };
+    const audioConfig = { codec: 'mp4a.40.2', sampleRate, numberOfChannels: channels, bitrate: 96_000 };
+    const [videoSupport, audioSupport] = await Promise.all([VideoEncoder.isConfigSupported(videoConfig), AudioEncoder.isConfigSupported(audioConfig)]);
+    if (!videoSupport.supported || !audioSupport.supported) throw new Error('Tu navegador no tiene los codificadores H.264/AAC necesarios.');
+    const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
+    const context = canvas.getContext('2d'); const target = new ArrayBufferTarget();
+    const muxer = new Muxer({ target, fastStart: 'in-memory', video: { codec: 'avc', width, height, frameRate: fps }, audio: { codec: 'aac', sampleRate, numberOfChannels: channels } });
+    const videoEncoder = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: error => { throw error; } });
+    const audioEncoder = new AudioEncoder({ output: (chunk, meta) => muxer.addAudioChunk(chunk, meta), error: error => { throw error; } });
+    videoEncoder.configure(videoSupport.config); audioEncoder.configure(audioSupport.config);
+    const totalFrames = seconds * fps, sceneFrames = Math.ceil(totalFrames / project.scenes.length), margin = Math.round(width * .08), contentWidth = width - margin * 2;
+    button.textContent = 'Componiendo video…';
+    for (let frameIndex = 0; frameIndex < totalFrames; frameIndex += 1) {
+      const sceneIndex = Math.min(project.scenes.length - 1, Math.floor(frameIndex / sceneFrames)); const scene = project.scenes[sceneIndex];
+      const gradient = context.createLinearGradient(0, 0, width, height); gradient.addColorStop(0, '#142219'); gradient.addColorStop(.6, isLong ? '#213d46' : '#384a2e'); gradient.addColorStop(1, '#b7ef52'); context.fillStyle = gradient; context.fillRect(0, 0, width, height);
+      context.fillStyle = 'rgba(255,255,255,.11)'; context.beginPath(); context.arc(width * .8 - (frameIndex % sceneFrames) / sceneFrames * width * .18, height * .17, width * .22, 0, Math.PI * 2); context.fill();
+      context.fillStyle = '#d7ff87'; context.font = `600 ${Math.round(width * .028)}px DM Mono, monospace`; context.fillText(`CLIPFORGE  /  CON VOZ IA  /  ${String(sceneIndex + 1).padStart(2, '0')}`, margin, Math.round(height * .1));
+      context.fillStyle = '#f7f5ed'; context.font = `600 ${Math.round(width * (isLong ? .052 : .078))}px Georgia, serif`; let y = Math.round(height * .25);
+      wrapText(context, scene.title, contentWidth).slice(0, 3).forEach(line => { context.fillText(line, margin, y); y += Math.round(width * .075); });
+      const boxY = isLong ? Math.round(height * .5) : Math.round(height * .48), boxH = isLong ? Math.round(height * .28) : Math.round(height * .31);
+      context.fillStyle = 'rgba(9,15,11,.72)'; context.fillRect(margin - 16, boxY, contentWidth + 32, boxH); context.fillStyle = '#fff'; context.font = `400 ${Math.round(width * (isLong ? .027 : .045))}px Arial, sans-serif`; y = boxY + Math.round(width * .06);
+      wrapText(context, scene.script, contentWidth - 36).slice(0, isLong ? 5 : 7).forEach(line => { context.fillText(line, margin, y); y += Math.round(width * (isLong ? .04 : .062)); });
+      const progress = frameIndex / totalFrames; context.fillStyle = '#17201a'; context.fillRect(margin, height - Math.round(height * .1), contentWidth * progress, 9);
+      const frame = new VideoFrame(canvas, { timestamp: Math.round(frameIndex * frameDuration), duration: Math.round(frameDuration) }); videoEncoder.encode(frame, { keyFrame: frameIndex % fps === 0 }); frame.close();
+    }
+    button.textContent = 'Codificando narración…';
+    const framesPerChunk = 1024;
+    for (let offset = 0; offset < audioBuffer.length; offset += framesPerChunk) {
+      const frameCount = Math.min(framesPerChunk, audioBuffer.length - offset); const data = new Float32Array(frameCount * channels);
+      for (let channel = 0; channel < channels; channel += 1) { const source = audioBuffer.getChannelData(channel); for (let index = 0; index < frameCount; index += 1) data[index * channels + channel] = source[offset + index]; }
+      const audioData = new AudioData({ format: 'f32', sampleRate, numberOfFrames: frameCount, numberOfChannels: channels, timestamp: Math.round(offset * 1_000_000 / sampleRate), data });
+      audioEncoder.encode(audioData); audioData.close();
+    }
+    await Promise.all([videoEncoder.flush(), audioEncoder.flush()]); videoEncoder.close(); audioEncoder.close(); muxer.finalize();
+    button.textContent = 'Subiendo MP4…'; const mp4 = new Blob([target.buffer], { type: 'video/mp4' });
+    const stored = await upload(`renders/${Date.now()}-${(project.title || 'clipforge').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-con-voz.mp4`, mp4, { access: 'public', handleUploadUrl: '/api/blob-client-upload', headers: savedSession() ? { Authorization: `Bearer ${savedSession()}` } : {}, contentType: 'video/mp4' });
+    const old = $('#composedRenderDownload'); if (old) old.remove(); const link = document.createElement('a'); link.id = 'composedRenderDownload'; link.href = stored.downloadUrl || stored.url; link.target = '_blank'; link.textContent = 'Descargar MP4 final con voz IA'; link.style.cssText = 'display:inline-block;margin-top:12px;font:600 12px DM Mono;color:#17201a;text-decoration:underline'; $('#review').append(link);
+    button.textContent = 'MP4 con voz listo ✓';
+  } catch (error) {
+    note.textContent = error.message || 'No pudimos componer el MP4 con voz.'; note.style.color = '#d64632'; button.disabled = false; button.textContent = 'Componer MP4 + voz';
+  }
+}
+
 setSource('idea');
 $$('.source-tab[data-source]').forEach(button => button.addEventListener('click', () => setSource(button.dataset.source)));
 $$('.style-card').forEach(button => button.addEventListener('click', () => {
@@ -356,6 +426,7 @@ $('#downloadBtn').addEventListener('click', () => {
 $('#renderTestBtn').addEventListener('click', createTestMp4);
 $('#renderFullBtn').addEventListener('click', createFullVisual);
 $('#voiceBtn').addEventListener('click', createAiVoice);
+$('#composeBtn').addEventListener('click', composeMp4WithVoice);
 $('#queueRender').addEventListener('click', () => {
   if (!project) return;
   const button = $('#queueRender');
