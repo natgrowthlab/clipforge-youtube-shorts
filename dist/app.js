@@ -87,11 +87,11 @@ function setSource(type) {
       $$('.source-tab[data-youtube-mode]').forEach(item => item.classList.toggle('active', item === button));
       $('#youtubeNote').textContent = youtubeMode === 'reference'
         ? 'La IA analizará estructura, tema y ángulo para proponer contenido nuevo.'
-        : 'Usa solo material propio o autorizado. Sube el MP4 original para crear una cola de clips.';
+        : 'Pega el enlace de YouTube. ClipForge lo analizará automáticamente para crear varios Shorts con subtítulos.';
       let controls = $('#clipControls');
       if (youtubeMode === 'clip' && !controls) {
         controls = document.createElement('div'); controls.id = 'clipControls'; controls.style.marginTop = '12px';
-        controls.innerHTML = `<label style="font-size:12px;display:grid;gap:7px"><input id="clipAuthorized" type="checkbox" /> Confirmo que soy titular o tengo autorización para reeditar este material.</label><input id="clipFile" type="file" accept="video/mp4" style="margin-top:10px" /><span class="field-note">El MP4 original se sube directamente a tu almacenamiento; ClipForge no descarga videos de YouTube.</span>`;
+        controls.innerHTML = `<label style="font-size:12px;display:grid;gap:7px"><input id="clipAuthorized" type="checkbox" /> Confirmo que soy titular o tengo autorización para reeditar este material.</label><span class="field-note">No necesitas subir un MP4: el enlace se procesa automáticamente y se crearán varios Shorts verticales con subtítulos.</span>`;
         $('#sourceBody').append(controls);
       }
       if (youtubeMode === 'reference' && controls) controls.remove();
@@ -128,7 +128,10 @@ async function loadQueue() {
     const { response, body } = await request('/api/render-jobs');
     if (!response.ok || !body.jobs?.length) return;
     list.hidden = false;
-    list.innerHTML = `<b>COLA DE PRODUCCIÓN</b><br>${body.jobs.slice(0, 5).map(job => `${escapeHtml(job.title)} · ${job.kind === 'clip-reedit' ? 'clips autorizados' : 'video generado'} · ${escapeHtml(job.status)} · ${job.estimatedCredits} créditos`).join('<br>')}`;
+    list.innerHTML = `<b>COLA DE PRODUCCIÓN</b><br>${body.jobs.slice(0, 5).map(job => {
+      const outputs = Array.isArray(job.clips) && job.clips.length ? `<br>${job.clips.map((clip, index) => `<a href="${escapeHtml(clip.url)}" target="_blank" rel="noopener">Ver Short ${index + 1}: ${escapeHtml(clip.title)}</a>`).join('<br>')}` : '';
+      return `${escapeHtml(job.title)} · ${job.kind === 'clip-reedit' ? 'clips autorizados' : 'video generado'} · ${escapeHtml(job.status)} · ${job.estimatedCredits} créditos${outputs}`;
+    }).join('<br>')}`;
   } catch { /* Queue remains optional if storage is unavailable. */ }
 }
 
@@ -179,16 +182,7 @@ async function renderProject() {
   button.textContent = 'Generando guion con IA…';
   let generated;
   try {
-    if (sourceType === 'youtube' && youtubeMode === 'clip') {
-      const file = $('#clipFile')?.files?.[0];
-      if (!$('#clipAuthorized')?.checked || !file) throw new Error('Para reeditar, confirma autorización y sube el MP4 original.');
-      button.textContent = 'Subiendo video autorizado…';
-      const { upload } = await import('https://esm.sh/@vercel/blob@2.8.2/client');
-      const safeFile = file.name.replace(/[^a-z0-9.]+/gi, '-').toLowerCase();
-      const stored = await upload(`sources/${Date.now()}-${safeFile}`, file, { access: 'public', handleUploadUrl: '/api/blob-client-upload', headers: savedSession() ? { Authorization: `Bearer ${savedSession()}` } : {}, contentType: 'video/mp4' });
-      sourceAsset = stored.url;
-      button.textContent = 'Analizando material…';
-    }
+    if (sourceType === 'youtube' && youtubeMode === 'clip' && !$('#clipAuthorized')?.checked) throw new Error('Confirma que tienes autorización para reeditar este material.');
     const { response, body } = await request('/api/generate-script', { method: 'POST', body: JSON.stringify({ sourceType, source: raw, youtubeMode, format, language, visualStyle }) });
     if (!response.ok) throw new Error(body.error || 'No pudimos generar el guion.');
     generated = body.script;
@@ -198,7 +192,7 @@ async function renderProject() {
     return;
   } finally { button.disabled = false; button.innerHTML = 'Crear guion para revisión <b>↗</b>'; }
   const scenes = generated.scenes.map(scene => ({ time: scene.time, title: scene.title, script: scene.script, direction: scene.direction, visualPrompt: scene.visual_prompt, subtitle: scene.subtitle, cta: scene.cta }));
-  project = { sourceType, source: raw, sourceAsset, youtubeMode, format, language, visualStyle, title: generated.title, brief: generated.brief, hook: generated.hook, scenes, status: 'revisión' };
+  project = { sourceType, source: raw, sourceAsset, rightsConfirmed: Boolean($('#clipAuthorized')?.checked), youtubeMode, format, language, visualStyle, title: generated.title, brief: generated.brief, hook: generated.hook, scenes, status: 'revisión' };
   updateCostEstimate();
   $('#scriptTitle').textContent = `${format === 'long' ? 'Video 4–5 min' : 'Short / Reel'} · ${generated.title}`;
   $('#strategy').innerHTML = `<div><label>IDEA CENTRAL</label><p>${escapeHtml(generated.brief)}</p></div><div><label>HOOK</label><p>${escapeHtml(generated.hook)}</p></div><div><label>ESTILO</label><p>${escapeHtml(visualStyle)} · ${escapeHtml(language)}</p></div>`;
@@ -480,7 +474,7 @@ $('#queueRender').addEventListener('click', async () => {
     const { response, body } = await request('/api/render-jobs', { method: 'POST', body: JSON.stringify({ ...project, maxCredits: Number($('#budgetSelect').value) }) });
     if (!response.ok) throw new Error(body.error || 'No pudimos crear el trabajo.');
     project.status = 'queued';
-    $('#queueStatus').textContent = `En cola · ${body.job.kind === 'clip-reedit' ? 'recorte autorizado' : 'video generado'} · máximo ${body.job.maxCredits} créditos.`;
+    $('#queueStatus').textContent = `En cola · ${body.job.kind === 'clip-reedit' ? 'analizando el enlace para crear Shorts' : 'video generado'} · máximo ${body.job.maxCredits} créditos.`;
     button.textContent = 'Enviado ✓';
     await loadQueue();
   } catch (error) {
