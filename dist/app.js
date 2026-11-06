@@ -305,6 +305,31 @@ async function createFullVisual() {
   }
 }
 
+async function createAiVoice() {
+  if (!project) return;
+  const button = $('#voiceBtn');
+  const note = $('.field-note');
+  const script = $$('.review-card textarea').map(field => field.value.trim()).filter(Boolean).join(' ');
+  button.disabled = true;
+  button.textContent = 'Generando voz…';
+  try {
+    const { response, body } = await request('/api/generate-voice', {
+      method: 'POST', body: JSON.stringify({ script, voice: $('#voiceSelect').value, title: project.title, language: project.language })
+    });
+    if (!response.ok) throw new Error(body.error || 'No pudimos generar la voz IA.');
+    const old = $('#voiceOutput'); if (old) old.remove();
+    const output = document.createElement('div'); output.id = 'voiceOutput'; output.style.cssText = 'margin-top:12px;display:grid;gap:8px;font:12px DM Sans;color:#17201a';
+    const disclosure = document.createElement('span'); disclosure.textContent = 'Narración generada con IA.';
+    const audio = document.createElement('audio'); audio.controls = true; audio.src = body.url;
+    const link = document.createElement('a'); link.href = body.downloadUrl || body.url; link.textContent = 'Descargar narración MP3'; link.target = '_blank';
+    output.append(disclosure, audio, link); $('#review').append(output);
+    button.textContent = 'Voz IA lista ✓';
+  } catch (error) {
+    note.textContent = error.message || 'No pudimos generar la voz IA.'; note.style.color = '#d64632';
+    button.disabled = false; button.textContent = 'Generar voz IA';
+  }
+}
+
 setSource('idea');
 $$('.source-tab[data-source]').forEach(button => button.addEventListener('click', () => setSource(button.dataset.source)));
 $$('.style-card').forEach(button => button.addEventListener('click', () => {
@@ -330,6 +355,7 @@ $('#downloadBtn').addEventListener('click', () => {
 });
 $('#renderTestBtn').addEventListener('click', createTestMp4);
 $('#renderFullBtn').addEventListener('click', createFullVisual);
+$('#voiceBtn').addEventListener('click', createAiVoice);
 $('#queueRender').addEventListener('click', () => {
   if (!project) return;
   const button = $('#queueRender');
