@@ -55,10 +55,14 @@ def openai_transcript(video_path, audio_path):
     data = response.json()
     return data.get('segments', []), data.get('text', '')
 
-def choose_clips(segments, language):
+def choose_clips(segments, language, settings):
     transcript = '\n'.join(f"[{seg.get('start', 0):.1f}-{seg.get('end', 0):.1f}] {seg.get('text', '')}" for seg in segments)[:90000]
-    schema = {'type': 'object', 'additionalProperties': False, 'properties': {'clips': {'type': 'array', 'minItems': 3, 'maxItems': 5, 'items': {'type': 'object', 'additionalProperties': False, 'properties': {'title': {'type': 'string'}, 'start': {'type': 'number'}, 'end': {'type': 'number'}, 'reason': {'type': 'string'}}, 'required': ['title', 'start', 'end', 'reason']}}}, 'required': ['clips']}
-    prompt = f"Selecciona entre 3 y 5 momentos independientes y muy compartibles de 25 a 58 segundos de esta transcripción. Evita solaparlos. Mantén el idioma {language}. Devuelve solo JSON.\n\n{transcript}"
+    low, high = (int(value) for value in settings.get('duration', '25-58').split('-'))
+    count = max(3, min(8, int(settings.get('clipCount', 5))))
+    schema = {'type': 'object', 'additionalProperties': False, 'properties': {'clips': {'type': 'array', 'minItems': 3, 'maxItems': count, 'items': {'type': 'object', 'additionalProperties': False, 'properties': {'title': {'type': 'string'}, 'start': {'type': 'number'}, 'end': {'type': 'number'}, 'reason': {'type': 'string'}, 'viralityScore': {'type': 'integer', 'minimum': 1, 'maximum': 100}, 'description': {'type': 'string'}, 'hashtags': {'type': 'array', 'items': {'type': 'string'}, 'maxItems': 8}}, 'required': ['title', 'start', 'end', 'reason', 'viralityScore', 'description', 'hashtags']}}}, 'required': ['clips']}
+    custom = settings.get('prompt') or 'Elige momentos con una idea completa, tensión y un buen remate.'
+    genre = settings.get('genre') or 'Detectar automáticamente'
+    prompt = f"Actúas como curador experto de clips sociales. Género: {genre}. Instrucción del creador: {custom}. Selecciona hasta {count} momentos independientes, compartibles y sin solapamiento de entre {low} y {high} segundos. Para cada clip devuelve un viralityScore realista (1-100), descripción breve y hasta 8 hashtags. Mantén el idioma {language}. Devuelve solo JSON.\n\n{transcript}"
     response = requests.post('https://api.openai.com/v1/responses', headers={'Authorization': f'Bearer {OPENAI_API_KEY}', 'Content-Type': 'application/json'}, json={'model': 'gpt-4o-mini', 'input': [{'role': 'user', 'content': [{'type': 'input_text', 'text': prompt}]}], 'text': {'format': {'type': 'json_schema', 'name': 'clip_selection', 'strict': True, 'schema': schema}}}, timeout=180)
     response.raise_for_status()
     data = response.json()
@@ -74,8 +78,9 @@ def ass_time(seconds):
 
 def ass_escape(text): return str(text).replace('\\', r'\\').replace('{', r'\{').replace('}', r'\}').replace('\n', r'\N')
 
-def write_ass(path, segments, start, end):
-    lines = ['[Script Info]', 'ScriptType: v4.00+', '[V4+ Styles]', 'Format: Name,Fontname,Fontsize,PrimaryColour,OutlineColour,BackColour,Bold,Italic,Alignment,MarginL,MarginR,MarginV,Encoding', 'Style: Default,DejaVu Sans,54,&H00FFFFFF,&H00101010,&H80101010,1,0,2,55,55,130,1', '[Events]', 'Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text']
+def write_ass(path, segments, start, end, preset):
+    style = {'impact': 'Style: Default,DejaVu Sans,58,&H00FFFFFF,&H00101010,&H80101010,1,0,2,55,55,130,1', 'clean': 'Style: Default,DejaVu Sans,42,&H00FFFFFF,&H00202020,&H60101010,0,0,2,65,65,100,1', 'podcast': 'Style: Default,DejaVu Sans,48,&H00000000,&H00FFFFFF,&H60FFFFFF,1,0,2,55,55,135,1'}.get(preset, 'Style: Default,DejaVu Sans,58,&H00FFFFFF,&H00101010,&H80101010,1,0,2,55,55,130,1')
+    lines = ['[Script Info]', 'ScriptType: v4.00+', '[V4+ Styles]', 'Format: Name,Fontname,Fontsize,PrimaryColour,OutlineColour,BackColour,Bold,Italic,Alignment,MarginL,MarginR,MarginV,Encoding', style, '[Events]', 'Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text']
     for segment in segments:
         seg_start, seg_end = float(segment.get('start', 0)), float(segment.get('end', 0))
         if seg_end <= start or seg_start >= end: continue
@@ -91,9 +96,17 @@ def blob_put(pathname, file_path):
 
 def safe_name(value): return re.sub(r'[^a-z0-9-]+', '-', value.lower()).strip('-')[:50] or 'clip'
 
+def video_filter(aspect, subtitle_path):
+    escaped = subtitle_path.as_posix().replace(':', r'\\:')
+    captions = f'subtitles={escaped}'
+    if aspect == '1:1': return f'scale=-2:1080,crop=1080:1080:(iw-1080)/2:0,{captions}'
+    if aspect == '16:9': return f'scale=1920:-2,crop=1920:1080:0:(ih-1080)/2,{captions}'
+    return f'scale=-2:1920,crop=1080:1920:(iw-1080)/2:0,{captions}'
+
 def process_job(payload):
     job, callback = payload['job'], payload['callbackUrl']
     job_id = job['id']
+    settings = job.get('clipSettings') or {}
     post_callback(callback, {'jobId': job_id, 'status': 'processing'})
     with tempfile.TemporaryDirectory(prefix='clipforge-') as temp:
         folder = Path(temp)
@@ -107,17 +120,23 @@ def process_job(payload):
             source = candidates[0]
         segments, transcript_text = openai_transcript(source, folder / 'audio.mp3')
         if not segments or not transcript_text.strip(): raise RuntimeError('No fue posible transcribir el video.')
-        selections = choose_clips(segments, job.get('language', 'Español latino'))
+        range_mode = settings.get('range', 'full')
+        if range_mode != 'full':
+            total = max(float(segment.get('end', 0)) for segment in segments)
+            third = total / 3
+            bounds = {'intro': (0, third), 'middle': (third, third * 2), 'end': (third * 2, total)}.get(range_mode, (0, total))
+            segments = [segment for segment in segments if float(segment.get('end', 0)) > bounds[0] and float(segment.get('start', 0)) < bounds[1]]
+        selections = choose_clips(segments, job.get('language', 'Español latino'), settings)
         clips = []
         for index, selection in enumerate(selections, start=1):
             start, end = max(0, float(selection['start'])), float(selection['end'])
-            if end - start < 20: continue
+            if end - start < 12: continue
             ass = folder / f'captions-{index}.ass'; output = folder / f'clip-{index}.mp4'
-            write_ass(ass, segments, start, end)
-            vf = f"scale=-2:1920,crop=1080:1920:(iw-1080)/2:0,subtitles={ass.as_posix()}"
+            write_ass(ass, segments, start, end, settings.get('captionPreset', 'impact'))
+            vf = video_filter(settings.get('aspectRatio', '9:16'), ass)
             subprocess.run(['ffmpeg', '-y', '-ss', str(start), '-to', str(end), '-i', str(source), '-vf', vf, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', str(output)], check=True, capture_output=True)
             url = blob_put(f'clips/{job_id}-{index}-{safe_name(selection["title"])}.mp4', output)
-            clips.append({'title': selection['title'], 'start': round(start, 1), 'end': round(end, 1), 'reason': selection['reason'], 'url': url})
+            clips.append({'title': selection['title'], 'start': round(start, 1), 'end': round(end, 1), 'reason': selection['reason'], 'viralityScore': selection['viralityScore'], 'description': selection['description'], 'hashtags': selection['hashtags'], 'url': url})
         if not clips: raise RuntimeError('No se encontraron momentos de duración adecuada.')
         post_callback(callback, {'jobId': job_id, 'status': 'completed', 'clips': clips, 'completedAt': datetime.now(timezone.utc).isoformat()})
 

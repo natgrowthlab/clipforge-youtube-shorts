@@ -92,7 +92,7 @@ function setSource(type) {
       let controls = $('#clipControls');
       if (youtubeMode === 'clip' && !controls) {
         controls = document.createElement('div'); controls.id = 'clipControls'; controls.style.marginTop = '12px';
-        controls.innerHTML = `<label style="font-size:12px;display:grid;gap:7px"><input id="clipAuthorized" type="checkbox" /> Confirmo que soy titular o tengo autorización para reeditar este material.</label><span class="field-note">No necesitas subir un MP4: el enlace se procesa automáticamente y se crearán varios Shorts verticales con subtítulos.</span>`;
+        controls.innerHTML = `<label style="font-size:12px;display:grid;gap:7px"><input id="clipAuthorized" type="checkbox" /> Confirmo que soy titular o tengo autorización para reeditar este material.</label><span class="field-note">No necesitas subir un MP4: el enlace se procesa automáticamente y se crearán varios clips con subtítulos.</span><div class="clip-config"><div><label>GÉNERO<select id="clipGenre"><option>Detectar automáticamente</option><option>Podcast / entrevista</option><option>Educativo</option><option>Vlog</option><option>Gaming</option><option>Noticias / opinión</option><option>Producto / UGC</option></select></label><label>FORMATO<select id="clipAspect"><option value="9:16">Vertical · 9:16</option><option value="1:1">Cuadrado · 1:1</option><option value="16:9">Horizontal · 16:9</option></select></label></div><div><label>DURACIÓN<select id="clipLength"><option value="25-58">25–58 segundos</option><option value="15-30">15–30 segundos</option><option value="45-90">45–90 segundos</option></select></label><label>CANTIDAD<select id="clipCount"><option value="3">3 clips</option><option value="5" selected>5 clips</option><option value="8">Hasta 8 clips</option></select></label></div><label>AI COPILOT · QUÉ QUIERES ENCONTRAR<textarea id="clipPrompt" rows="2" placeholder="Ej. Encuentra los mejores consejos prácticos y respuestas contundentes."></textarea></label><div><label>CAPTIONS<select id="captionPreset"><option value="impact">Impacto · grandes</option><option value="clean">Limpias · sobrias</option><option value="podcast">Podcast · centradas</option></select></label><label>RANGO DEL VIDEO<select id="clipRange"><option value="full">Video completo</option><option value="intro">Primer tercio</option><option value="middle">Tercio central</option><option value="end">Último tercio</option></select></label></div></div>`;
         $('#sourceBody').append(controls);
       }
       if (youtubeMode === 'reference' && controls) controls.remove();
@@ -130,7 +130,7 @@ async function loadQueue() {
     if (!response.ok || !body.jobs?.length) return;
     list.hidden = false;
     list.innerHTML = `<b>COLA DE PRODUCCIÓN</b><br>${body.jobs.slice(0, 5).map(job => {
-      const outputs = Array.isArray(job.clips) && job.clips.length ? `<br>${job.clips.map((clip, index) => `<a href="${escapeHtml(clip.url)}" target="_blank" rel="noopener">Ver Short ${index + 1}: ${escapeHtml(clip.title)}</a>`).join('<br>')}` : '';
+      const outputs = Array.isArray(job.clips) && job.clips.length ? `<br>${job.clips.map((clip, index) => `<a href="${escapeHtml(clip.url)}" target="_blank" rel="noopener">Ver Short ${index + 1}: ${escapeHtml(clip.title)}${clip.viralityScore ? ` · ${escapeHtml(clip.viralityScore)}/100` : ''}</a><small>${escapeHtml(clip.description || '')} ${Array.isArray(clip.hashtags) ? escapeHtml(clip.hashtags.join(' ')) : ''}</small>`).join('<br>')}` : '';
       return `${escapeHtml(job.title)} · ${job.kind === 'clip-reedit' ? 'clips autorizados' : 'video generado'} · ${escapeHtml(job.status)} · ${job.estimatedCredits} créditos${outputs}`;
     }).join('<br>')}`;
   } catch { /* Queue remains optional if storage is unavailable. */ }
@@ -193,7 +193,8 @@ async function renderProject() {
     return;
   } finally { button.disabled = false; button.innerHTML = 'Crear guion para revisión <b>↗</b>'; }
   const scenes = generated.scenes.map(scene => ({ time: scene.time, title: scene.title, script: scene.script, direction: scene.direction, visualPrompt: scene.visual_prompt, subtitle: scene.subtitle, cta: scene.cta }));
-  project = { sourceType, source: raw, sourceAsset, rightsConfirmed: Boolean($('#clipAuthorized')?.checked), youtubeMode, format, language, visualStyle, title: generated.title, brief: generated.brief, hook: generated.hook, scenes, status: 'revisión' };
+  const clipSettings = sourceType === 'youtube' && youtubeMode === 'clip' ? { genre: $('#clipGenre')?.value, aspectRatio: $('#clipAspect')?.value, duration: $('#clipLength')?.value, clipCount: Number($('#clipCount')?.value || 5), prompt: $('#clipPrompt')?.value?.trim(), captionPreset: $('#captionPreset')?.value, range: $('#clipRange')?.value } : null;
+  project = { sourceType, source: raw, sourceAsset, rightsConfirmed: Boolean($('#clipAuthorized')?.checked), youtubeMode, format, language, visualStyle, clipSettings, title: generated.title, brief: generated.brief, hook: generated.hook, scenes, status: 'revisión' };
   updateCostEstimate();
   $('#scriptTitle').textContent = `${format === 'long' ? 'Video 4–5 min' : 'Short / Reel'} · ${generated.title}`;
   $('#strategy').innerHTML = `<div><label>IDEA CENTRAL</label><p>${escapeHtml(generated.brief)}</p></div><div><label>HOOK</label><p>${escapeHtml(generated.hook)}</p></div><div><label>ESTILO</label><p>${escapeHtml(visualStyle)} · ${escapeHtml(language)}</p></div>`;
