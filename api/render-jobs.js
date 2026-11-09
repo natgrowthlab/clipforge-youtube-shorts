@@ -28,7 +28,9 @@ module.exports = async (req, res) => {
         const workerResponse = await fetch(`${process.env.CLIP_WORKER_URL.replace(/\/$/, '')}/enqueue`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-worker-secret': process.env.WORKER_SECRET }, body: JSON.stringify({ job, callbackUrl: `${process.env.CLIPFORGE_APP_URL || 'https://clipforg3.vercel.app'}/api/worker-callback` }) });
         if (!workerResponse.ok) throw new Error(await workerResponse.text());
         job.status = 'processing';
-      } catch (error) { job.status = 'queued'; job.workerError = 'El worker aún no aceptó el trabajo; se reintentará desde la cola.'; }
+      } catch (error) {
+        return res.status(502).json({ error: 'El motor de clips no aceptó el video. Inténtalo de nuevo en unos segundos.' });
+      }
     }
     return res.status(201).json({ job: { ...job, manifestUrl: blob.url } });
   }
