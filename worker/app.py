@@ -44,6 +44,15 @@ def youtube_url(value):
     parsed = urlparse(str(value or ''))
     return parsed.scheme == 'https' and parsed.netloc.lower().removeprefix('www.') in ('youtube.com', 'youtu.be')
 
+def download_direct(url, folder):
+    response = requests.get(url, stream=True, timeout=900)
+    response.raise_for_status()
+    source = folder / 'source.mp4'
+    with source.open('wb') as output:
+        for chunk in response.iter_content(1024 * 1024):
+            if chunk: output.write(chunk)
+    return source
+
 def post_callback(url, payload):
     response = requests.post(url, json=payload, headers={'x-worker-secret': WORKER_SECRET}, timeout=30)
     response.raise_for_status()
@@ -207,7 +216,7 @@ def process_job(payload):
     post_callback(callback, {'jobId': job_id, 'status': 'processing', 'phase': 'Descargando el video desde YouTube…'})
     with tempfile.TemporaryDirectory(prefix='clipforge-') as temp:
         folder = Path(temp)
-        source = download_from_apify(job['sourceUrl'], folder)
+        source = download_direct(job['sourceAsset'], folder) if job.get('sourceAsset') else download_from_apify(job['sourceUrl'], folder)
         if source is None:
             options = {
                 'outtmpl': str(folder / 'source.%(ext)s'),
@@ -254,7 +263,7 @@ def enqueue():
     if not valid_secret(request.headers.get('x-worker-secret')): return jsonify(error='No autorizado'), 401
     payload = request.get_json(silent=True) or {}
     job = payload.get('job') or {}
-    if not youtube_url(job.get('sourceUrl')): return jsonify(error='Se requiere un enlace válido de YouTube.'), 400
+    if not (youtube_url(job.get('sourceUrl')) or str(job.get('sourceAsset') or '').startswith('https://')): return jsonify(error='Se requiere un MP4 o enlace válido.'), 400
     if not (PROJECT_ID and PROCESS_URL and TASK_SERVICE_ACCOUNT): return jsonify(error='Worker sin configuración de cola.'), 503
     client = tasks_v2.CloudTasksClient(); parent = client.queue_path(PROJECT_ID, REGION, QUEUE_ID)
     task = {'http_request': {'http_method': tasks_v2.HttpMethod.POST, 'url': PROCESS_URL, 'headers': {'Content-Type': 'application/json'}, 'body': json.dumps(payload).encode(), 'oidc_token': {'service_account_email': TASK_SERVICE_ACCOUNT, 'audience': PROCESS_URL}}}

@@ -65,9 +65,7 @@ $('#logoutBtn').addEventListener('click', async () => {
   $('#email').focus();
 });
 
-const sourceTemplates = {
-  youtube: `<input id="sourceInput" type="url" placeholder="Pega un enlace de YouTube: https://youtube.com/watch?v=…" /><span class="field-note">ClipForge detectará y editará automáticamente los momentos más aprovechables.</span><div id="clipControls" class="clip-only"><div class="clip-config"><div><label>GÉNERO<select id="clipGenre"><option>Detectar automáticamente</option><option>Podcast / entrevista</option><option>Educativo</option><option>Vlog</option><option>Gaming</option><option>Noticias / opinión</option><option>Producto / UGC</option></select></label><label>FORMATO<select id="clipAspect"><option value="9:16">Vertical · 9:16</option><option value="1:1">Cuadrado · 1:1</option><option value="16:9">Horizontal · 16:9</option></select></label></div><div><label>DURACIÓN<select id="clipLength"><option value="25-58">25–58 segundos</option><option value="15-30">15–30 segundos</option><option value="45-90">45–90 segundos</option></select></label><label>CANTIDAD<select id="clipCount"><option value="3">3 clips</option><option value="5" selected>5 clips</option><option value="8">Hasta 8 clips</option></select></label></div><label>AI COPILOT · QUÉ QUIERES ENCONTRAR<textarea id="clipPrompt" rows="2" placeholder="Ej. Encuentra los mejores consejos prácticos y respuestas contundentes."></textarea></label><div><label>CAPTIONS<select id="captionPreset"><option value="impact">Impacto · grandes</option><option value="clean">Limpias · sobrias</option><option value="podcast">Podcast · centradas</option></select></label><label>RANGO DEL VIDEO<select id="clipRange"><option value="full">Video completo</option><option value="intro">Primer tercio</option><option value="middle">Tercio central</option><option value="end">Último tercio</option></select></label></div></div></div>`
-};
+const sourceTemplates = { youtube: `<input id="sourceInput" type="file" accept="video/mp4" /><span class="field-note">Sube tu MP4. ClipForge lo analiza, encuentra los mejores momentos y crea Shorts con subtítulos.</span><div id="clipControls" class="clip-only"><div class="clip-config"><div><label>FORMATO<select id="clipAspect"><option value="9:16">Vertical · 9:16</option><option value="1:1">Cuadrado · 1:1</option></select></label><label>CANTIDAD<select id="clipCount"><option value="3">3 clips</option><option value="5" selected>5 clips</option></select></label></div><label>QUÉ QUIERES ENCONTRAR<textarea id="clipPrompt" rows="2"></textarea></label></div></div>` };
 
 let sourceType = 'youtube';
 let visualStyle = 'Podcast';
@@ -75,13 +73,13 @@ let youtubeMode = 'clip';
 let project = null;
 
 function setSource() {
-  $('.hero').innerHTML = `<div class="eyebrow">CLIPPING AUTOMÁTICO PARA YOUTUBE</div><h1>Un video largo.<br><em>Varios clips</em> listos.</h1><p class="lead">Pega un enlace de YouTube autorizado. ClipForge encuentra los mejores momentos, los adapta y añade subtítulos.</p>`;
+  $('.hero').innerHTML = `<div class="eyebrow">CLIPPING AUTOMÁTICO</div><h1>Un MP4 largo.<br><em>Varios clips</em> listos.</h1><p class="lead">Sube tu video. ClipForge encuentra los mejores momentos, los adapta y añade subtítulos.</p>`;
   $('.studio .source-tabs')?.remove();
   $('#format')?.closest('label')?.remove();
   $('#styleGrid')?.previousElementSibling?.remove();
   $('#styleGrid')?.remove();
   const panel = $('.studio .panel');
-  if (panel) { panel.querySelector('.eyebrow').textContent = '01 · VIDEO DE YOUTUBE'; panel.querySelector('h2').textContent = 'Convierte un video en clips que vale la pena publicar.'; }
+  if (panel) { panel.querySelector('.eyebrow').textContent = '01 · SUBE TU MP4'; panel.querySelector('h2').textContent = 'Convierte un video en clips que vale la pena publicar.'; }
   $('#createScript').innerHTML = 'Crear Shorts automáticamente <b>↗</b>';
   ['renderTestBtn', 'voiceSelect', 'voiceBtn', 'composeBtn', 'renderFullBtn'].forEach(id => $(`#${id}`)?.remove());
   const productionText = $('.render-bar div p');
@@ -437,16 +435,18 @@ $$('.style-card').forEach(button => button.addEventListener('click', () => {
   $$('.style-card').forEach(item => item.classList.toggle('active', item === button));
 }));
 async function createClips() {
-  const raw = $('#sourceInput')?.value?.trim();
+  const file = $('#sourceInput')?.files?.[0];
   const note = $('.field-note');
   const button = $('#createScript');
-  if (!/^https:\/\/(www\.)?(youtube\.com|youtu\.be)\//i.test(raw || '')) {
-    note.textContent = 'Pega un enlace válido de YouTube para crear los Shorts.'; note.style.color = '#d64632'; return;
+  if (!file || file.type !== 'video/mp4') {
+    note.textContent = 'Selecciona un archivo MP4.'; note.style.color = '#d64632'; return;
   }
-  const clipSettings = { genre: $('#clipGenre')?.value, aspectRatio: $('#clipAspect')?.value, duration: $('#clipLength')?.value, clipCount: Number($('#clipCount')?.value || 5), prompt: $('#clipPrompt')?.value?.trim(), captionPreset: $('#captionPreset')?.value, range: $('#clipRange')?.value };
-  button.disabled = true; button.textContent = 'Analizando video y creando Shorts…';
+  const clipSettings = { aspectRatio: $('#clipAspect')?.value, duration: '25-58', clipCount: Number($('#clipCount')?.value || 5), prompt: $('#clipPrompt')?.value?.trim(), captionPreset: 'impact', range: 'full' };
+  button.disabled = true; button.textContent = 'Subiendo video…';
   try {
-    const { response, body } = await request('/api/render-jobs', { method: 'POST', body: JSON.stringify({ title: 'Shorts de YouTube', format: 'short', sourceType: 'youtube', youtubeMode: 'clip', source: raw, language: $('#language')?.value || 'Español latino', visualStyle: 'Podcast', clipSettings, scenes: [], maxCredits: 15 }) });
+    const uploaded = await window.clipforgeUploadMp4(file, progress => { button.textContent = `Subiendo video… ${Math.round(progress.percentage)}%`; });
+    button.textContent = 'Analizando video y creando Shorts…';
+    const { response, body } = await request('/api/render-jobs', { method: 'POST', body: JSON.stringify({ title: file.name.replace(/\.mp4$/i, ''), format: 'short', sourceType: 'upload', sourceAsset: uploaded.url, language: $('#language')?.value || 'Español latino', visualStyle: 'Podcast', clipSettings, scenes: [], maxCredits: 15 }) });
     if (!response.ok) throw new Error(body.error || 'No pudimos iniciar el análisis.');
     note.textContent = 'Listo: estamos encontrando los mejores momentos. Las previsualizaciones aparecerán abajo al terminar.'; note.style.color = '#557335';
     await loadQueue();
