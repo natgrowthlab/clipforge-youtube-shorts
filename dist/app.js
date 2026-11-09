@@ -66,38 +66,27 @@ $('#logoutBtn').addEventListener('click', async () => {
 });
 
 const sourceTemplates = {
-  idea: `<textarea id="sourceInput" placeholder="Ej. Cómo dejar de posponer lo importante cuando tienes demasiadas tareas y poco tiempo."></textarea><span class="field-note">Describe el tema, a quién va dirigido o el resultado que quieres lograr.</span>`,
-  youtube: `<input id="sourceInput" type="url" placeholder="https://youtube.com/watch?v=…" /><div class="source-tabs" style="margin-top:10px"><button class="source-tab active" data-youtube-mode="reference">Usar como referencia</button><button class="source-tab" data-youtube-mode="clip">Cortar y reeditar</button></div><span class="field-note" id="youtubeNote">La IA analizará estructura, tema y ángulo para proponer contenido nuevo.</span>`,
-  text: `<textarea id="sourceInput" placeholder="Pega aquí tu artículo, notas, brief o post."></textarea><span class="field-note">El sistema extraerá la idea central, los argumentos y las frases aprovechables.</span>`,
-  pdf: `<input id="sourceInput" type="file" accept="application/pdf" /><span class="field-note">El archivo se guardará de forma privada en Vercel Blob al conectar el almacenamiento.</span>`,
-  transcript: `<textarea id="sourceInput" placeholder="00:00 — Introducción\n00:28 — Idea principal\n01:14 — Ejemplo…"></textarea><span class="field-note">Incluye tiempos si quieres usar la transcripción para un futuro recorte de video.</span>`
+  youtube: `<input id="sourceInput" type="url" placeholder="Pega un enlace de YouTube: https://youtube.com/watch?v=…" /><span class="field-note">Usa un video propio o material para el que tengas autorización de edición.</span><div id="clipControls" class="clip-only"><label class="rights-confirmation"><input id="clipAuthorized" type="checkbox" /> Confirmo que soy titular o tengo autorización para reeditar este material.</label><span class="field-note">ClipForge analiza el enlace, encuentra los mejores momentos y entrega varios clips subtitulados.</span><div class="clip-config"><div><label>GÉNERO<select id="clipGenre"><option>Detectar automáticamente</option><option>Podcast / entrevista</option><option>Educativo</option><option>Vlog</option><option>Gaming</option><option>Noticias / opinión</option><option>Producto / UGC</option></select></label><label>FORMATO<select id="clipAspect"><option value="9:16">Vertical · 9:16</option><option value="1:1">Cuadrado · 1:1</option><option value="16:9">Horizontal · 16:9</option></select></label></div><div><label>DURACIÓN<select id="clipLength"><option value="25-58">25–58 segundos</option><option value="15-30">15–30 segundos</option><option value="45-90">45–90 segundos</option></select></label><label>CANTIDAD<select id="clipCount"><option value="3">3 clips</option><option value="5" selected>5 clips</option><option value="8">Hasta 8 clips</option></select></label></div><label>AI COPILOT · QUÉ QUIERES ENCONTRAR<textarea id="clipPrompt" rows="2" placeholder="Ej. Encuentra los mejores consejos prácticos y respuestas contundentes."></textarea></label><div><label>CAPTIONS<select id="captionPreset"><option value="impact">Impacto · grandes</option><option value="clean">Limpias · sobrias</option><option value="podcast">Podcast · centradas</option></select></label><label>RANGO DEL VIDEO<select id="clipRange"><option value="full">Video completo</option><option value="intro">Primer tercio</option><option value="middle">Tercio central</option><option value="end">Último tercio</option></select></label></div></div></div>`
 };
 
-let sourceType = 'idea';
-let visualStyle = 'UGC';
-let youtubeMode = 'reference';
+let sourceType = 'youtube';
+let visualStyle = 'Podcast';
+let youtubeMode = 'clip';
 let project = null;
 
-function setSource(type) {
-  sourceType = type;
-  $$('.source-tab[data-source]').forEach(button => button.classList.toggle('active', button.dataset.source === type));
-  $('#sourceBody').innerHTML = sourceTemplates[type];
-  if (type === 'youtube') {
-    $$('.source-tab[data-youtube-mode]').forEach(button => button.addEventListener('click', () => {
-      youtubeMode = button.dataset.youtubeMode;
-      $$('.source-tab[data-youtube-mode]').forEach(item => item.classList.toggle('active', item === button));
-      $('#youtubeNote').textContent = youtubeMode === 'reference'
-        ? 'La IA analizará estructura, tema y ángulo para proponer contenido nuevo.'
-        : 'Pega el enlace de YouTube. ClipForge lo analizará automáticamente para crear varios Shorts con subtítulos.';
-      let controls = $('#clipControls');
-      if (youtubeMode === 'clip' && !controls) {
-        controls = document.createElement('div'); controls.id = 'clipControls'; controls.style.marginTop = '12px';
-        controls.innerHTML = `<label style="font-size:12px;display:grid;gap:7px"><input id="clipAuthorized" type="checkbox" /> Confirmo que soy titular o tengo autorización para reeditar este material.</label><span class="field-note">No necesitas subir un MP4: el enlace se procesa automáticamente y se crearán varios clips con subtítulos.</span><div class="clip-config"><div><label>GÉNERO<select id="clipGenre"><option>Detectar automáticamente</option><option>Podcast / entrevista</option><option>Educativo</option><option>Vlog</option><option>Gaming</option><option>Noticias / opinión</option><option>Producto / UGC</option></select></label><label>FORMATO<select id="clipAspect"><option value="9:16">Vertical · 9:16</option><option value="1:1">Cuadrado · 1:1</option><option value="16:9">Horizontal · 16:9</option></select></label></div><div><label>DURACIÓN<select id="clipLength"><option value="25-58">25–58 segundos</option><option value="15-30">15–30 segundos</option><option value="45-90">45–90 segundos</option></select></label><label>CANTIDAD<select id="clipCount"><option value="3">3 clips</option><option value="5" selected>5 clips</option><option value="8">Hasta 8 clips</option></select></label></div><label>AI COPILOT · QUÉ QUIERES ENCONTRAR<textarea id="clipPrompt" rows="2" placeholder="Ej. Encuentra los mejores consejos prácticos y respuestas contundentes."></textarea></label><div><label>CAPTIONS<select id="captionPreset"><option value="impact">Impacto · grandes</option><option value="clean">Limpias · sobrias</option><option value="podcast">Podcast · centradas</option></select></label><label>RANGO DEL VIDEO<select id="clipRange"><option value="full">Video completo</option><option value="intro">Primer tercio</option><option value="middle">Tercio central</option><option value="end">Último tercio</option></select></label></div></div>`;
-        $('#sourceBody').append(controls);
-      }
-      if (youtubeMode === 'reference' && controls) controls.remove();
-    }));
-  }
+function setSource() {
+  $('.hero').innerHTML = `<div class="eyebrow">CLIPPING AUTOMÁTICO PARA YOUTUBE</div><h1>Un video largo.<br><em>Varios clips</em> listos.</h1><p class="lead">Pega un enlace de YouTube autorizado. ClipForge encuentra los mejores momentos, los adapta y añade subtítulos.</p>`;
+  $('.studio .source-tabs')?.remove();
+  $('#format')?.closest('label')?.remove();
+  $('#styleGrid')?.previousElementSibling?.remove();
+  $('#styleGrid')?.remove();
+  const panel = $('.studio .panel');
+  if (panel) { panel.querySelector('.eyebrow').textContent = '01 · VIDEO DE YOUTUBE'; panel.querySelector('h2').textContent = 'Convierte un video en clips que vale la pena publicar.'; }
+  $('#createScript').innerHTML = 'Analizar video y encontrar clips <b>↗</b>';
+  ['renderTestBtn', 'voiceSelect', 'voiceBtn', 'composeBtn', 'renderFullBtn'].forEach(id => $(`#${id}`)?.remove());
+  const productionText = $('.render-bar div p');
+  if (productionText) productionText.textContent = 'Revisa el enfoque y envía el video a la cola. El motor creará los clips, los subtítulos y los enlaces de descarga.';
+  $('#sourceBody').innerHTML = sourceTemplates.youtube;
 }
 
 function spokenLanguage(language) {
@@ -171,7 +160,7 @@ async function renderProject() {
     note.style.color = '#d64632';
     return;
   }
-  const format = $('#format').value;
+  const format = 'short';
   const language = $('#language').value;
   let sourceAsset = null;
   if (sourceType === 'pdf') {
@@ -196,7 +185,7 @@ async function renderProject() {
   const clipSettings = sourceType === 'youtube' && youtubeMode === 'clip' ? { genre: $('#clipGenre')?.value, aspectRatio: $('#clipAspect')?.value, duration: $('#clipLength')?.value, clipCount: Number($('#clipCount')?.value || 5), prompt: $('#clipPrompt')?.value?.trim(), captionPreset: $('#captionPreset')?.value, range: $('#clipRange')?.value } : null;
   project = { sourceType, source: raw, sourceAsset, rightsConfirmed: Boolean($('#clipAuthorized')?.checked), youtubeMode, format, language, visualStyle, clipSettings, title: generated.title, brief: generated.brief, hook: generated.hook, scenes, status: 'revisión' };
   updateCostEstimate();
-  $('#scriptTitle').textContent = `${format === 'long' ? 'Video 4–5 min' : 'Short / Reel'} · ${generated.title}`;
+  $('#scriptTitle').textContent = `Plan de clips · ${generated.title}`;
   $('#strategy').innerHTML = `<div><label>IDEA CENTRAL</label><p>${escapeHtml(generated.brief)}</p></div><div><label>HOOK</label><p>${escapeHtml(generated.hook)}</p></div><div><label>ESTILO</label><p>${escapeHtml(visualStyle)} · ${escapeHtml(language)}</p></div>`;
   const output = $('#scriptOutput');
   output.innerHTML = '';
@@ -440,8 +429,7 @@ async function composeMp4WithVoice() {
   }
 }
 
-setSource('idea');
-$$('.source-tab[data-source]').forEach(button => button.addEventListener('click', () => setSource(button.dataset.source)));
+setSource();
 $$('.style-card').forEach(button => button.addEventListener('click', () => {
   visualStyle = button.dataset.style;
   $$('.style-card').forEach(item => item.classList.toggle('active', item === button));
@@ -463,10 +451,10 @@ $('#downloadBtn').addEventListener('click', () => {
   link.click();
   URL.revokeObjectURL(link.href);
 });
-$('#renderTestBtn').addEventListener('click', createTestMp4);
-$('#renderFullBtn').addEventListener('click', createFullVisual);
-$('#voiceBtn').addEventListener('click', createAiVoice);
-$('#composeBtn').addEventListener('click', composeMp4WithVoice);
+$('#renderTestBtn')?.addEventListener('click', createTestMp4);
+$('#renderFullBtn')?.addEventListener('click', createFullVisual);
+$('#voiceBtn')?.addEventListener('click', createAiVoice);
+$('#composeBtn')?.addEventListener('click', composeMp4WithVoice);
 $('#queueRender').addEventListener('click', async () => {
   if (!project) return;
   const button = $('#queueRender');
