@@ -116,12 +116,35 @@ def download_from_apify(source_url, folder):
     return source
 
 def openai_transcript(video_path, audio_path):
-    subprocess.run(['ffmpeg', '-y', '-i', str(video_path), '-vn', '-ac', '1', '-ar', '16000', str(audio_path)], check=True, capture_output=True)
-    with open(audio_path, 'rb') as audio:
-        response = requests.post('https://api.openai.com/v1/audio/transcriptions', headers={'Authorization': f'Bearer {OPENAI_API_KEY}'}, data={'model': 'gpt-4o-mini-transcribe', 'response_format': 'verbose_json', 'timestamp_granularities[]': 'segment'}, files={'file': ('audio.mp3', audio, 'audio/mpeg')}, timeout=900)
-    response.raise_for_status()
-    data = response.json()
-    return data.get('segments', []), data.get('text', '')
+    """Transcribe in compact chunks so long videos remain within the upload limit."""
+    duration = float(subprocess.check_output([
+        'ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+        '-of', 'default=noprint_wrappers=1:nokey=1', str(video_path)
+    ], text=True).strip())
+    all_segments, text_parts = [], []
+    chunk_seconds = 900
+    for index, offset in enumerate(range(0, max(1, int(duration) + 1), chunk_seconds), start=1):
+        chunk_path = audio_path.parent / f'audio-{index}.mp3'
+        subprocess.run([
+            'ffmpeg', '-y', '-ss', str(offset), '-t', str(chunk_seconds), '-i', str(video_path),
+            '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'libmp3lame', '-b:a', '48k', str(chunk_path)
+        ], check=True, capture_output=True)
+        with chunk_path.open('rb') as audio:
+            response = requests.post(
+                'https://api.openai.com/v1/audio/transcriptions',
+                headers={'Authorization': f'Bearer {OPENAI_API_KEY}'},
+                data={'model': 'whisper-1', 'response_format': 'verbose_json', 'timestamp_granularities[]': 'segment'},
+                files={'file': (chunk_path.name, audio, 'audio/mpeg')}, timeout=900,
+            )
+        if not response.ok:
+            try: detail = response.json().get('error', {}).get('message', response.text)
+            except ValueError: detail = response.text
+            raise RuntimeError(f'OpenAI no pudo transcribir el audio: {str(detail)[:300]}')
+        data = response.json()
+        text_parts.append(data.get('text', ''))
+        for segment in data.get('segments', []):
+            all_segments.append({**segment, 'start': float(segment.get('start', 0)) + offset, 'end': float(segment.get('end', 0)) + offset})
+    return all_segments, ' '.join(text_parts).strip()
 
 def choose_clips(segments, language, settings):
     transcript = '\n'.join(f"[{seg.get('start', 0):.1f}-{seg.get('end', 0):.1f}] {seg.get('text', '')}" for seg in segments)[:90000]
@@ -247,7 +270,7 @@ def process():
             try: post_callback(callback, {'jobId': job_id, 'status': 'failed', 'error': str(error), 'completedAt': datetime.now(timezone.utc).isoformat()})
             except Exception: app.logger.exception('Callback failed')
         message = str(error).lower()
-        if any(marker in message for marker in ('not a bot', 'video is unavailable', 'http error 403', 'sign in to confirm')):
+        if any(marker in message for marker in ('not a bot', 'video is unavailable', 'http error 403', 'sign in to confirm', '400 client error', 'openai no pudo transcribir')):
             return jsonify(ok=False, error=str(error)), 200
         return jsonify(error=str(error)), 500
 
