@@ -172,6 +172,9 @@ def process():
         if callback and job_id:
             try: post_callback(callback, {'jobId': job_id, 'status': 'failed', 'error': str(error), 'completedAt': datetime.now(timezone.utc).isoformat()})
             except Exception: app.logger.exception('Callback failed')
+        message = str(error).lower()
+        if any(marker in message for marker in ('not a bot', 'video is unavailable', 'http error 403', 'sign in to confirm')):
+            return jsonify(ok=False, error=str(error)), 200
         return jsonify(error=str(error)), 500
 
 @app.get('/health')
