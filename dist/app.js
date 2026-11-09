@@ -66,7 +66,7 @@ $('#logoutBtn').addEventListener('click', async () => {
 });
 
 const sourceTemplates = {
-  youtube: `<input id="sourceInput" type="url" placeholder="Pega un enlace de YouTube: https://youtube.com/watch?v=…" /><span class="field-note">Usa un video propio o material para el que tengas autorización de edición.</span><div id="clipControls" class="clip-only"><label class="rights-confirmation"><input id="clipAuthorized" type="checkbox" /> Confirmo que soy titular o tengo autorización para reeditar este material.</label><span class="field-note">ClipForge analiza el enlace, encuentra los mejores momentos y entrega varios clips subtitulados.</span><div class="clip-config"><div><label>GÉNERO<select id="clipGenre"><option>Detectar automáticamente</option><option>Podcast / entrevista</option><option>Educativo</option><option>Vlog</option><option>Gaming</option><option>Noticias / opinión</option><option>Producto / UGC</option></select></label><label>FORMATO<select id="clipAspect"><option value="9:16">Vertical · 9:16</option><option value="1:1">Cuadrado · 1:1</option><option value="16:9">Horizontal · 16:9</option></select></label></div><div><label>DURACIÓN<select id="clipLength"><option value="25-58">25–58 segundos</option><option value="15-30">15–30 segundos</option><option value="45-90">45–90 segundos</option></select></label><label>CANTIDAD<select id="clipCount"><option value="3">3 clips</option><option value="5" selected>5 clips</option><option value="8">Hasta 8 clips</option></select></label></div><label>AI COPILOT · QUÉ QUIERES ENCONTRAR<textarea id="clipPrompt" rows="2" placeholder="Ej. Encuentra los mejores consejos prácticos y respuestas contundentes."></textarea></label><div><label>CAPTIONS<select id="captionPreset"><option value="impact">Impacto · grandes</option><option value="clean">Limpias · sobrias</option><option value="podcast">Podcast · centradas</option></select></label><label>RANGO DEL VIDEO<select id="clipRange"><option value="full">Video completo</option><option value="intro">Primer tercio</option><option value="middle">Tercio central</option><option value="end">Último tercio</option></select></label></div></div></div>`
+  youtube: `<input id="sourceInput" type="url" placeholder="Pega un enlace de YouTube: https://youtube.com/watch?v=…" /><span class="field-note">ClipForge detectará y editará automáticamente los momentos más aprovechables.</span><div id="clipControls" class="clip-only"><div class="clip-config"><div><label>GÉNERO<select id="clipGenre"><option>Detectar automáticamente</option><option>Podcast / entrevista</option><option>Educativo</option><option>Vlog</option><option>Gaming</option><option>Noticias / opinión</option><option>Producto / UGC</option></select></label><label>FORMATO<select id="clipAspect"><option value="9:16">Vertical · 9:16</option><option value="1:1">Cuadrado · 1:1</option><option value="16:9">Horizontal · 16:9</option></select></label></div><div><label>DURACIÓN<select id="clipLength"><option value="25-58">25–58 segundos</option><option value="15-30">15–30 segundos</option><option value="45-90">45–90 segundos</option></select></label><label>CANTIDAD<select id="clipCount"><option value="3">3 clips</option><option value="5" selected>5 clips</option><option value="8">Hasta 8 clips</option></select></label></div><label>AI COPILOT · QUÉ QUIERES ENCONTRAR<textarea id="clipPrompt" rows="2" placeholder="Ej. Encuentra los mejores consejos prácticos y respuestas contundentes."></textarea></label><div><label>CAPTIONS<select id="captionPreset"><option value="impact">Impacto · grandes</option><option value="clean">Limpias · sobrias</option><option value="podcast">Podcast · centradas</option></select></label><label>RANGO DEL VIDEO<select id="clipRange"><option value="full">Video completo</option><option value="intro">Primer tercio</option><option value="middle">Tercio central</option><option value="end">Último tercio</option></select></label></div></div></div>`
 };
 
 let sourceType = 'youtube';
@@ -82,7 +82,7 @@ function setSource() {
   $('#styleGrid')?.remove();
   const panel = $('.studio .panel');
   if (panel) { panel.querySelector('.eyebrow').textContent = '01 · VIDEO DE YOUTUBE'; panel.querySelector('h2').textContent = 'Convierte un video en clips que vale la pena publicar.'; }
-  $('#createScript').innerHTML = 'Analizar video y encontrar clips <b>↗</b>';
+  $('#createScript').innerHTML = 'Crear Shorts automáticamente <b>↗</b>';
   ['renderTestBtn', 'voiceSelect', 'voiceBtn', 'composeBtn', 'renderFullBtn'].forEach(id => $(`#${id}`)?.remove());
   const productionText = $('.render-bar div p');
   if (productionText) productionText.textContent = 'Revisa el enfoque y envía el video a la cola. El motor creará los clips, los subtítulos y los enlaces de descarga.';
@@ -119,7 +119,7 @@ async function loadQueue() {
     if (!response.ok || !body.jobs?.length) return;
     list.hidden = false;
     list.innerHTML = `<b>COLA DE PRODUCCIÓN</b><br>${body.jobs.slice(0, 5).map(job => {
-      const outputs = Array.isArray(job.clips) && job.clips.length ? `<br>${job.clips.map((clip, index) => `<a href="${escapeHtml(clip.url)}" target="_blank" rel="noopener">Ver Short ${index + 1}: ${escapeHtml(clip.title)}${clip.viralityScore ? ` · ${escapeHtml(clip.viralityScore)}/100` : ''}</a><small>${escapeHtml(clip.description || '')} ${Array.isArray(clip.hashtags) ? escapeHtml(clip.hashtags.join(' ')) : ''}</small>`).join('<br>')}` : '';
+      const outputs = Array.isArray(job.clips) && job.clips.length ? `<div class="clip-previews">${job.clips.map((clip, index) => { const url = /^https:\/\//.test(String(clip.url || '')) ? escapeHtml(clip.url) : ''; return `<article><video controls preload="metadata" src="${url}"></video><a href="${url}" download target="_blank" rel="noopener">Descargar Short ${index + 1}: ${escapeHtml(clip.title)}${clip.viralityScore ? ` · ${escapeHtml(clip.viralityScore)}/100` : ''}</a><small>${escapeHtml(clip.description || '')} ${Array.isArray(clip.hashtags) ? escapeHtml(clip.hashtags.join(' ')) : ''}</small></article>`; }).join('')}</div>` : '';
       return `${escapeHtml(job.title)} · ${job.kind === 'clip-reedit' ? 'clips autorizados' : 'video generado'} · ${escapeHtml(job.status)} · ${job.estimatedCredits} créditos${outputs}`;
     }).join('<br>')}`;
   } catch { /* Queue remains optional if storage is unavailable. */ }
@@ -434,7 +434,24 @@ $$('.style-card').forEach(button => button.addEventListener('click', () => {
   visualStyle = button.dataset.style;
   $$('.style-card').forEach(item => item.classList.toggle('active', item === button));
 }));
-$('#createScript').addEventListener('click', renderProject);
+async function createClips() {
+  const raw = $('#sourceInput')?.value?.trim();
+  const note = $('.field-note');
+  const button = $('#createScript');
+  if (!/^https:\/\/(www\.)?(youtube\.com|youtu\.be)\//i.test(raw || '')) {
+    note.textContent = 'Pega un enlace válido de YouTube para crear los Shorts.'; note.style.color = '#d64632'; return;
+  }
+  const clipSettings = { genre: $('#clipGenre')?.value, aspectRatio: $('#clipAspect')?.value, duration: $('#clipLength')?.value, clipCount: Number($('#clipCount')?.value || 5), prompt: $('#clipPrompt')?.value?.trim(), captionPreset: $('#captionPreset')?.value, range: $('#clipRange')?.value };
+  button.disabled = true; button.textContent = 'Analizando video y creando Shorts…';
+  try {
+    const { response, body } = await request('/api/render-jobs', { method: 'POST', body: JSON.stringify({ title: 'Shorts de YouTube', format: 'short', sourceType: 'youtube', youtubeMode: 'clip', source: raw, language: $('#language')?.value || 'Español latino', visualStyle: 'Podcast', clipSettings, scenes: [], maxCredits: 15 }) });
+    if (!response.ok) throw new Error(body.error || 'No pudimos iniciar el análisis.');
+    note.textContent = 'Listo: estamos encontrando los mejores momentos. Las previsualizaciones aparecerán abajo al terminar.'; note.style.color = '#557335';
+    await loadQueue();
+  } catch (error) { note.textContent = error.message; note.style.color = '#d64632'; }
+  finally { button.disabled = false; button.innerHTML = 'Crear Shorts automáticamente <b>↗</b>'; }
+}
+$('#createScript').addEventListener('click', createClips);
 $('#copyBtn').addEventListener('click', async () => {
   if (!project) return;
   const edited = $$('.review-card textarea').map((field, index) => ({ ...project.scenes[index], script: field.value }));
