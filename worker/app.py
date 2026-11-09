@@ -98,8 +98,11 @@ def download_from_apify(source_url, folder):
         timeout=60,
     )
     items_response.raise_for_status()
-    item = next((entry for entry in items_response.json() if entry.get('status') == 'ok' and entry.get('videoFileUrl')), None)
+    entries = items_response.json()
+    item = next((entry for entry in entries if entry.get('status') == 'ok' and entry.get('videoFileUrl')), None)
     if not item:
+        if any(entry.get('status') == 'source_unavailable' for entry in entries):
+            raise RuntimeError('Este enlace de YouTube no está disponible para descarga. Comprueba que sea público y reproducible.')
         raise RuntimeError('El proveedor no pudo entregar un MP4 para este enlace.')
     file_response = requests.get(item['videoFileUrl'], params={'token': APIFY_TOKEN}, stream=True, timeout=900)
     file_response.raise_for_status()
@@ -172,7 +175,7 @@ def process_job(payload):
     job, callback = payload['job'], payload['callbackUrl']
     job_id = job['id']
     settings = job.get('clipSettings') or {}
-    post_callback(callback, {'jobId': job_id, 'status': 'processing'})
+    post_callback(callback, {'jobId': job_id, 'status': 'processing', 'phase': 'Descargando el video desde YouTube…'})
     with tempfile.TemporaryDirectory(prefix='clipforge-') as temp:
         folder = Path(temp)
         source = download_from_apify(job['sourceUrl'], folder)
@@ -192,6 +195,7 @@ def process_job(payload):
             candidates = list(folder.glob('source.*'))
             if not candidates: raise RuntimeError('No se pudo obtener el video autorizado.')
             source = candidates[0]
+        post_callback(callback, {'jobId': job_id, 'status': 'processing', 'phase': 'Transcribiendo el contenido…'})
         segments, transcript_text = openai_transcript(source, folder / 'audio.mp3')
         if not segments or not transcript_text.strip(): raise RuntimeError('No fue posible transcribir el video.')
         range_mode = settings.get('range', 'full')
@@ -200,9 +204,11 @@ def process_job(payload):
             third = total / 3
             bounds = {'intro': (0, third), 'middle': (third, third * 2), 'end': (third * 2, total)}.get(range_mode, (0, total))
             segments = [segment for segment in segments if float(segment.get('end', 0)) > bounds[0] and float(segment.get('start', 0)) < bounds[1]]
+        post_callback(callback, {'jobId': job_id, 'status': 'processing', 'phase': 'Identificando los mejores momentos…'})
         selections = choose_clips(segments, job.get('language', 'Español latino'), settings)
         clips = []
         for index, selection in enumerate(selections, start=1):
+            post_callback(callback, {'jobId': job_id, 'status': 'processing', 'phase': f'Generando Short {index} de {len(selections)} con subtítulos…'})
             start, end = max(0, float(selection['start'])), float(selection['end'])
             if end - start < 12: continue
             ass = folder / f'captions-{index}.ass'; output = folder / f'clip-{index}.mp4'

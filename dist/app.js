@@ -121,7 +121,8 @@ async function loadQueue() {
     list.innerHTML = `<b>COLA DE PRODUCCIÓN</b><br>${body.jobs.slice(0, 5).map(job => {
       const outputs = Array.isArray(job.clips) && job.clips.length ? `<div class="clip-previews">${job.clips.map((clip, index) => { const url = /^https:\/\//.test(String(clip.url || '')) ? escapeHtml(clip.url) : ''; return `<article><video controls preload="metadata" src="${url}"></video><a href="${url}" download target="_blank" rel="noopener">Descargar Short ${index + 1}: ${escapeHtml(clip.title)}${clip.viralityScore ? ` · ${escapeHtml(clip.viralityScore)}/100` : ''}</a><small>${escapeHtml(clip.description || '')} ${Array.isArray(clip.hashtags) ? escapeHtml(clip.hashtags.join(' ')) : ''}</small></article>`; }).join('')}</div>` : '';
       const error = job.error ? `<br><small class="job-error">${escapeHtml(job.error)}</small>` : '';
-      return `${escapeHtml(job.title)} · ${job.kind === 'clip-reedit' ? 'clips de YouTube' : 'video generado'} · ${escapeHtml(job.status)} · ${job.estimatedCredits} créditos${error}${outputs}`;
+      const phase = job.phase && job.status === 'processing' ? `<br><small>${escapeHtml(job.phase)}</small>` : '';
+      return `${escapeHtml(job.title)} · ${job.kind === 'clip-reedit' ? 'clips de YouTube' : 'video generado'} · ${escapeHtml(job.status)} · ${job.estimatedCredits} créditos${phase}${error}${outputs}`;
     }).join('<br>')}`;
   } catch { /* Queue remains optional if storage is unavailable. */ }
 }

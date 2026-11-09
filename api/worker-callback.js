@@ -10,9 +10,9 @@ function authorized(req) {
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Método no permitido.' });
   if (!authorized(req)) return res.status(401).json({ error: 'Worker no autorizado.' });
-  const { jobId, status, clips, error, completedAt } = req.body || {};
+  const { jobId, status, clips, error, phase, completedAt } = req.body || {};
   if (!jobId || !['completed', 'failed', 'processing'].includes(status)) return res.status(400).json({ error: 'Actualización inválida.' });
-  const result = { jobId, status, clips: Array.isArray(clips) ? clips.slice(0, 8) : [], error: error ? String(error).slice(0, 500) : null, completedAt: completedAt || new Date().toISOString() };
+  const result = { jobId, status, phase: phase ? String(phase).slice(0, 160) : null, clips: Array.isArray(clips) ? clips.slice(0, 8) : [], error: error ? String(error).slice(0, 500) : null, completedAt: completedAt || new Date().toISOString() };
   await put(`job-status/${jobId}.json`, JSON.stringify(result), { access: 'public', allowOverwrite: true, contentType: 'application/json', cacheControlMaxAge: 30 });
   return res.status(200).json({ ok: true });
 };
