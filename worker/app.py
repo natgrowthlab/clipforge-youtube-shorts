@@ -25,6 +25,8 @@ TASK_SERVICE_ACCOUNT = os.environ.get('TASK_SERVICE_ACCOUNT', '')
 WORKER_SECRET = os.environ.get('WORKER_SECRET', '')
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
 BLOB_TOKEN = os.environ.get('BLOB_READ_WRITE_TOKEN', '')
+APIFY_TOKEN = os.environ.get('APIFY_TOKEN', '')
+APIFY_ACTOR_ID = os.environ.get('APIFY_ACTOR_ID', 'hgservices/video-downloader-converter')
 
 def valid_secret(value):
     return bool(WORKER_SECRET) and hmac.compare_digest(str(value or ''), WORKER_SECRET)
@@ -45,6 +47,70 @@ def youtube_url(value):
 def post_callback(url, payload):
     response = requests.post(url, json=payload, headers={'x-worker-secret': WORKER_SECRET}, timeout=30)
     response.raise_for_status()
+
+def download_from_apify(source_url, folder):
+    """Download a public source through the configured media-ingestion provider."""
+    if not APIFY_TOKEN:
+        return None
+    actor = APIFY_ACTOR_ID.replace('/', '~')
+    run_response = requests.post(
+        f'https://api.apify.com/v2/acts/{actor}/runs',
+        params={'token': APIFY_TOKEN},
+        json={
+            'startUrls': [{'url': source_url}],
+            'format': 'mp4',
+            'videoQuality': '720p',
+            'maxFileSizeMb': 2048,
+        },
+        timeout=60,
+    )
+    run_response.raise_for_status()
+    run = run_response.json().get('data') or {}
+    run_id = run.get('id')
+    if not run_id:
+        raise RuntimeError('El proveedor de ingestión no inició la descarga.')
+
+    deadline = time.monotonic() + 1500
+    while time.monotonic() < deadline:
+        status_response = requests.get(
+            f'https://api.apify.com/v2/actor-runs/{run_id}',
+            params={'token': APIFY_TOKEN},
+            timeout=30,
+        )
+        status_response.raise_for_status()
+        run = status_response.json().get('data') or {}
+        status = run.get('status')
+        if status == 'SUCCEEDED':
+            break
+        if status in ('FAILED', 'ABORTED', 'TIMED-OUT'):
+            detail = run.get('statusMessage') or status.lower()
+            raise RuntimeError(f'El proveedor de ingestión no pudo obtener este video: {detail}')
+        time.sleep(5)
+    else:
+        raise RuntimeError('El proveedor de ingestión tardó demasiado en responder.')
+
+    dataset_id = run.get('defaultDatasetId')
+    if not dataset_id:
+        raise RuntimeError('El proveedor no devolvió el archivo de video.')
+    items_response = requests.get(
+        f'https://api.apify.com/v2/datasets/{dataset_id}/items',
+        params={'token': APIFY_TOKEN, 'clean': 'true'},
+        timeout=60,
+    )
+    items_response.raise_for_status()
+    item = next((entry for entry in items_response.json() if entry.get('status') == 'ok' and entry.get('videoFileUrl')), None)
+    if not item:
+        raise RuntimeError('El proveedor no pudo entregar un MP4 para este enlace.')
+    file_response = requests.get(item['videoFileUrl'], params={'token': APIFY_TOKEN}, stream=True, timeout=900)
+    file_response.raise_for_status()
+    source = folder / 'source.mp4'
+    with source.open('wb') as output:
+        for chunk in file_response.iter_content(chunk_size=1024 * 1024):
+            if chunk:
+                output.write(chunk)
+    if not source.exists() or source.stat().st_size < 1024:
+        raise RuntimeError('El archivo entregado por el proveedor está vacío.')
+    return source
 
 def openai_transcript(video_path, audio_path):
     subprocess.run(['ffmpeg', '-y', '-i', str(video_path), '-vn', '-ac', '1', '-ar', '16000', str(audio_path)], check=True, capture_output=True)
@@ -109,17 +175,19 @@ def process_job(payload):
     post_callback(callback, {'jobId': job_id, 'status': 'processing'})
     with tempfile.TemporaryDirectory(prefix='clipforge-') as temp:
         folder = Path(temp)
-        options = {
-            'outtmpl': str(folder / 'source.%(ext)s'),
-            'format': 'mp4/bestvideo+bestaudio/best',
-            'noplaylist': True,
-            'quiet': True,
-            'max_filesize': 2_000_000_000,
-            'extractor_args': {'youtube': {'player_client': ['ios', 'mweb'], 'player_skip': ['webpage', 'configs'], 'skip': ['hls', 'dash']}},
-        }
-        with yt_dlp.YoutubeDL(options) as ydl:
-            info = ydl.extract_info(job['sourceUrl'], download=True)
-            source = Path(ydl.prepare_filename(info))
+        source = download_from_apify(job['sourceUrl'], folder)
+        if source is None:
+            options = {
+                'outtmpl': str(folder / 'source.%(ext)s'),
+                'format': 'mp4/bestvideo+bestaudio/best',
+                'noplaylist': True,
+                'quiet': True,
+                'max_filesize': 2_000_000_000,
+                'extractor_args': {'youtube': {'player_client': ['ios', 'mweb'], 'player_skip': ['webpage', 'configs'], 'skip': ['hls', 'dash']}},
+            }
+            with yt_dlp.YoutubeDL(options) as ydl:
+                info = ydl.extract_info(job['sourceUrl'], download=True)
+                source = Path(ydl.prepare_filename(info))
         if not source.exists():
             candidates = list(folder.glob('source.*'))
             if not candidates: raise RuntimeError('No se pudo obtener el video autorizado.')
