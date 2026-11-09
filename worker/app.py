@@ -109,7 +109,14 @@ def process_job(payload):
     post_callback(callback, {'jobId': job_id, 'status': 'processing'})
     with tempfile.TemporaryDirectory(prefix='clipforge-') as temp:
         folder = Path(temp)
-        options = {'outtmpl': str(folder / 'source.%(ext)s'), 'format': 'mp4/bestvideo+bestaudio/best', 'noplaylist': True, 'quiet': True, 'max_filesize': 2_000_000_000}
+        options = {
+            'outtmpl': str(folder / 'source.%(ext)s'),
+            'format': 'mp4/bestvideo+bestaudio/best',
+            'noplaylist': True,
+            'quiet': True,
+            'max_filesize': 2_000_000_000,
+            'extractor_args': {'youtube': {'player_client': ['ios', 'mweb'], 'player_skip': ['webpage', 'configs'], 'skip': ['hls', 'dash']}},
+        }
         with yt_dlp.YoutubeDL(options) as ydl:
             info = ydl.extract_info(job['sourceUrl'], download=True)
             source = Path(ydl.prepare_filename(info))
