@@ -255,6 +255,7 @@ def process_job(payload):
             subprocess.run(['ffmpeg', '-y', '-ss', str(start), '-to', str(end), '-i', str(source), '-vf', vf, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', str(output)], check=True, capture_output=True)
             url = blob_put(f'clips/{job_id}-{index}-{safe_name(selection["title"])}.mp4', output)
             clips.append({'title': selection['title'], 'start': round(start, 1), 'end': round(end, 1), 'reason': selection['reason'], 'viralityScore': selection['viralityScore'], 'description': selection['description'], 'hashtags': selection['hashtags'], 'url': url})
+            post_callback(callback, {'jobId': job_id, 'status': 'processing', 'phase': f'Short {len(clips)} listo. Generando los demás…', 'clips': clips})
         if not clips: raise RuntimeError('No se encontraron momentos de duración adecuada.')
         post_callback(callback, {'jobId': job_id, 'status': 'completed', 'clips': clips, 'completedAt': datetime.now(timezone.utc).isoformat()})
 
