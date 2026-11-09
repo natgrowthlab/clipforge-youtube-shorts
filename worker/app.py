@@ -1,4 +1,3 @@
-import base64
 import hmac
 import json
 import os
@@ -148,7 +147,7 @@ def enqueue():
     if not youtube_url(job.get('sourceUrl')): return jsonify(error='Se requiere un enlace válido de YouTube.'), 400
     if not (PROJECT_ID and PROCESS_URL and TASK_SERVICE_ACCOUNT): return jsonify(error='Worker sin configuración de cola.'), 503
     client = tasks_v2.CloudTasksClient(); parent = client.queue_path(PROJECT_ID, REGION, QUEUE_ID)
-    task = {'http_request': {'http_method': tasks_v2.HttpMethod.POST, 'url': PROCESS_URL, 'headers': {'Content-Type': 'application/json'}, 'body': base64.b64encode(json.dumps(payload).encode()), 'oidc_token': {'service_account_email': TASK_SERVICE_ACCOUNT, 'audience': PROCESS_URL}}}
+    task = {'http_request': {'http_method': tasks_v2.HttpMethod.POST, 'url': PROCESS_URL, 'headers': {'Content-Type': 'application/json'}, 'body': json.dumps(payload).encode(), 'oidc_token': {'service_account_email': TASK_SERVICE_ACCOUNT, 'audience': PROCESS_URL}}}
     client.create_task(parent=parent, task=task)
     return jsonify(ok=True, status='queued'), 202
 
