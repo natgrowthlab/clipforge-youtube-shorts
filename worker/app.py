@@ -64,7 +64,10 @@ def download_from_apify(source_url, folder):
         },
         timeout=60,
     )
-    run_response.raise_for_status()
+    if not run_response.ok:
+        try: detail = run_response.json().get('error', {}).get('message', run_response.text)
+        except ValueError: detail = run_response.text
+        raise RuntimeError(f'Apify no pudo iniciar la descarga: {str(detail)[:240]}')
     run = run_response.json().get('data') or {}
     run_id = run.get('id')
     if not run_id:
@@ -77,7 +80,8 @@ def download_from_apify(source_url, folder):
             params={'token': APIFY_TOKEN},
             timeout=30,
         )
-        status_response.raise_for_status()
+        if not status_response.ok:
+            raise RuntimeError(f'Apify no pudo consultar la descarga (HTTP {status_response.status_code}).')
         run = status_response.json().get('data') or {}
         status = run.get('status')
         if status == 'SUCCEEDED':
@@ -97,7 +101,8 @@ def download_from_apify(source_url, folder):
         params={'token': APIFY_TOKEN, 'clean': 'true'},
         timeout=60,
     )
-    items_response.raise_for_status()
+    if not items_response.ok:
+        raise RuntimeError(f'Apify no pudo recuperar el resultado (HTTP {items_response.status_code}).')
     entries = items_response.json()
     item = next((entry for entry in entries if entry.get('status') == 'ok' and entry.get('videoFileUrl')), None)
     if not item:
@@ -105,7 +110,8 @@ def download_from_apify(source_url, folder):
             raise RuntimeError('Este enlace de YouTube no está disponible para descarga. Comprueba que sea público y reproducible.')
         raise RuntimeError('El proveedor no pudo entregar un MP4 para este enlace.')
     file_response = requests.get(item['videoFileUrl'], params={'token': APIFY_TOKEN}, stream=True, timeout=900)
-    file_response.raise_for_status()
+    if not file_response.ok:
+        raise RuntimeError(f'Apify no pudo entregar el archivo (HTTP {file_response.status_code}).')
     source = folder / 'source.mp4'
     with source.open('wb') as output:
         for chunk in file_response.iter_content(chunk_size=1024 * 1024):
@@ -181,7 +187,7 @@ def write_ass(path, segments, start, end, preset):
 
 def blob_put(pathname, file_path):
     with open(file_path, 'rb') as body:
-        response = requests.put(f'https://vercel.com/api/blob/?pathname={pathname}', data=body, headers={'Authorization': f'Bearer {BLOB_TOKEN}', 'x-api-version': '7', 'x-vercel-blob-access': 'public', 'x-content-type': 'video/mp4', 'x-add-random-suffix': '1'}, timeout=900)
+        response = requests.put(f'https://blob.vercel-storage.com/{pathname}', data=body, headers={'Authorization': f'Bearer {BLOB_TOKEN}', 'x-api-version': '7', 'x-vercel-blob-access': 'public', 'x-content-type': 'video/mp4', 'x-add-random-suffix': '1'}, timeout=900)
     response.raise_for_status()
     return response.json()['url']
 
@@ -270,7 +276,7 @@ def process():
             try: post_callback(callback, {'jobId': job_id, 'status': 'failed', 'error': str(error), 'completedAt': datetime.now(timezone.utc).isoformat()})
             except Exception: app.logger.exception('Callback failed')
         message = str(error).lower()
-        if any(marker in message for marker in ('not a bot', 'video is unavailable', 'http error 403', 'sign in to confirm', '400 client error', 'openai no pudo transcribir')):
+        if any(marker in message for marker in ('apify', 'not a bot', 'video is unavailable', 'http error 403', 'sign in to confirm', '400 client error', 'openai no pudo transcribir')):
             return jsonify(ok=False, error=str(error)), 200
         return jsonify(error=str(error)), 500
 
